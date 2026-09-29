@@ -141,3 +141,7 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+# Helix 本地配置，不要上传
+config.json
+.env
+.helix/
