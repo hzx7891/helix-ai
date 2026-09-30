@@ -6,6 +6,7 @@ import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
+import { loadConfig, saveConfig, redactConfig } from './config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -50,10 +51,9 @@ export function startServer({ port, token }) {
   return new Promise((resolve, reject) => {
     const app = express();
 
-    // 允许解析 JSON 请求体，最大 5MB
     app.use(express.json({ limit: '5mb' }));
 
-    // 健康检查：用来判断后端是否活着
+    // 健康检查
     app.get('/api/health', (req, res) => {
       res.json({
         ok: true,
@@ -62,10 +62,29 @@ export function startServer({ port, token }) {
       });
     });
 
-    // 静态文件：public/ 里的东西可以直接访问
+    // 读取配置（Key 脱敏）
+    app.get('/api/config', async (req, res) => {
+      try {
+        const config = await loadConfig();
+        res.json(redactConfig(config));
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // 保存配置
+    app.post('/api/config', async (req, res) => {
+      try {
+        const partial = req.body || {};
+        const next = await saveConfig(partial);
+        res.json(redactConfig(next));
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     app.use(express.static(PUBLIC_DIR));
 
-    // 首页：如果 public/index.html 存在就用它，否则显示临时页面
     app.get('/', (req, res) => {
       const indexFile = join(PUBLIC_DIR, 'index.html');
       if (existsSync(indexFile)) {
@@ -77,7 +96,6 @@ export function startServer({ port, token }) {
 
     const server = createServer(app);
 
-    // WebSocket 用 noServer 模式：手动处理 upgrade，先验证 token
     const wss = new WebSocketServer({ noServer: true });
 
     server.on('upgrade', (req, socket, head) => {
@@ -89,13 +107,11 @@ export function startServer({ port, token }) {
         return;
       }
 
-      // 只接受 /ws 路径
       if (url.pathname !== '/ws') {
         socket.destroy();
         return;
       }
 
-      // token 不对就直接拒绝握手
       if (url.searchParams.get('token') !== token) {
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
         socket.destroy();
@@ -107,12 +123,13 @@ export function startServer({ port, token }) {
       });
     });
 
-    wss.on('connection', (ws) => {
-      // 连接成功后，先发一条 ready，告诉前端我在
+    wss.on('connection', async (ws) => {
+      const config = await loadConfig();
+
       ws.send(JSON.stringify({
         type: 'ready',
-        model: null,
-        workspace: null,
+        model: config.model || null,
+        workspace: config.workspace || null,
       }));
 
       ws.on('message', (data) => {
@@ -122,7 +139,6 @@ export function startServer({ port, token }) {
         } catch {
           return;
         }
-        // 后面的步骤才会真正处理这些消息，现在只打印
         console.log('收到前端消息：', msg.type);
       });
 
@@ -139,4 +155,4 @@ export function startServer({ port, token }) {
       resolve({ port, workspace: null });
     });
   });
-}
+      }
