@@ -1,1 +1,44 @@
-{"json":"betajson"}
+{
+  "name": "helix-ai",
+  "version": "0.0.1",
+  "description": "本地优先的 AI Agent 工作台",
+  "type": "module",
+  "bin": {
+    "helix": "bin/helix.js"
+  },
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node bin/helix.js"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "cli",
+    "local-first",
+    "helix"
+  ],
+  "author": "hzx7891",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hzx7891/helix-ai.git"
+  },
+  "homepage": "https://github.com/hzx7891/helix-ai",
+  "bugs": {
+    "url": "https://github.com/hzx7891/helix-ai/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "bin",
+    "server",
+    "public",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.18.0"
+  }
+}
