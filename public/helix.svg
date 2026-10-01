@@ -1,1 +1,16 @@
-
+<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="hgBack" x1="20" y1="8" x2="44" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4a6ae0"/>
+      <stop offset="1" stop-color="#7a4ad0"/>
+    </linearGradient>
+    <linearGradient id="hgFront" x1="44" y1="8" x2="20" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8fa8ff"/>
+      <stop offset="1" stop-color="#b48aff"/>
+    </linearGradient>
+  </defs>
+  <path d="M32 8 C 19 8, 19 24, 32 24 C 45 24, 45 40, 32 40 C 19 40, 19 56, 32 56"
+        stroke="url(#hgBack)" stroke-width="6" stroke-linecap="round" opacity="0.55"/>
+  <path d="M32 8 C 45 8, 45 24, 32 24 C 19 24, 19 40, 32 40 C 45 40, 45 56, 32 56"
+        stroke="url(#hgFront)" stroke-width="6" stroke-linecap="round"/>
+</svg>
