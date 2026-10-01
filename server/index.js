@@ -7,13 +7,13 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { loadConfig, saveConfig, redactConfig } from './config.js';
+import { streamChat } from './llm.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PUBLIC_DIR = join(__dirname, '..', 'public');
 const VERSION = '0.0.1';
 
-// 临时页面：public/index.html 还没写好的时候，先给浏览器看这个
 function placeholderPage() {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -47,13 +47,22 @@ function placeholderPage() {
 </html>`;
 }
 
+function sendJson(ws, obj) {
+  if (ws.readyState === ws.OPEN) {
+    ws.send(JSON.stringify(obj));
+  }
+}
+
+function sendError(ws, message, code = 'UNKNOWN') {
+  sendJson(ws, { type: 'error', message, code });
+}
+
 export function startServer({ port, token }) {
   return new Promise((resolve, reject) => {
     const app = express();
 
     app.use(express.json({ limit: '5mb' }));
 
-    // 健康检查
     app.get('/api/health', (req, res) => {
       res.json({
         ok: true,
@@ -62,7 +71,6 @@ export function startServer({ port, token }) {
       });
     });
 
-    // 读取配置（Key 脱敏）
     app.get('/api/config', async (req, res) => {
       try {
         const config = await loadConfig();
@@ -72,7 +80,6 @@ export function startServer({ port, token }) {
       }
     });
 
-    // 保存配置
     app.post('/api/config', async (req, res) => {
       try {
         const partial = req.body || {};
@@ -95,7 +102,6 @@ export function startServer({ port, token }) {
     });
 
     const server = createServer(app);
-
     const wss = new WebSocketServer({ noServer: true });
 
     server.on('upgrade', (req, socket, head) => {
@@ -126,20 +132,92 @@ export function startServer({ port, token }) {
     wss.on('connection', async (ws) => {
       const config = await loadConfig();
 
-      ws.send(JSON.stringify({
+      sendJson(ws, {
         type: 'ready',
         model: config.model || null,
         workspace: config.workspace || null,
-      }));
+      });
 
-      ws.on('message', (data) => {
+      // 每个连接一份聊天记录，断开就丢
+      const history = [];
+      let currentAbort = null;
+
+      async function handleUserMessage(text) {
+        if (currentAbort) {
+          sendError(ws, '上一条还没回答完，请先等一会儿', 'BUSY');
+          return;
+        }
+
+        const freshConfig = await loadConfig();
+
+        if (!freshConfig.apiKey) {
+          sendError(ws, '还没有填 API Key，请到设置里配置', 'INVALID_API_KEY');
+          sendJson(ws, { type: 'done', reason: 'error' });
+          return;
+        }
+
+        // 第一条消息来时，把系统提示词塞到最前面
+        if (history.length === 0) {
+          history.push({
+            role: 'system',
+            content: freshConfig.systemPrompt || '你是一个本地 AI 助手。',
+          });
+        }
+
+        history.push({ role: 'user', content: text });
+
+        currentAbort = new AbortController();
+        let assistantText = '';
+
+        try {
+          const { toolCalls } = await streamChat({
+            config: freshConfig,
+            messages: history,
+            signal: currentAbort.signal,
+            onDelta: (chunk) => {
+              assistantText += chunk;
+              sendJson(ws, { type: 'assistant_delta', text: chunk });
+            },
+            onReasoning: (chunk) => {
+              sendJson(ws, { type: 'reasoning_delta', text: chunk });
+            },
+          });
+
+          if (assistantText) {
+            history.push({ role: 'assistant', content: assistantText });
+          }
+
+          if (toolCalls.length > 0) {
+            // 工具系统还没接，先告诉用户
+            sendError(ws, 'AI 想调用工具，但工具系统还没接好', 'TOOLS_NOT_READY');
+          }
+
+          sendJson(ws, { type: 'done', reason: 'complete' });
+        } catch (err) {
+          if (err.code === 'ABORTED') {
+            sendJson(ws, { type: 'done', reason: 'aborted' });
+          } else {
+            sendError(ws, err.message, err.code || 'UNKNOWN');
+            sendJson(ws, { type: 'done', reason: 'error' });
+          }
+        } finally {
+          currentAbort = null;
+        }
+      }
+
+      ws.on('message', async (data) => {
         let msg;
         try {
           msg = JSON.parse(data.toString());
         } catch {
           return;
         }
-        console.log('收到前端消息：', msg.type);
+
+        if (msg.type === 'user_message') {
+          await handleUserMessage(String(msg.text || ''));
+        } else if (msg.type === 'abort') {
+          if (currentAbort) currentAbort.abort();
+        }
       });
 
       ws.on('error', (err) => {
@@ -155,4 +233,4 @@ export function startServer({ port, token }) {
       resolve({ port, workspace: null });
     });
   });
-      }
+}
