@@ -1,1 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Helix · 本地优先的 AI Agent 工作台</title>
+  <link rel="icon" type="image/svg+xml" href="helix.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- 顶栏 -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <img src="helix.svg" alt="Helix" class="topbar-logo">
+      <span class="topbar-brand">Helix</span>
+      <span id="status" class="status status-connecting">连接中…</span>
+    </div>
+    <div class="topbar-right">
+      <span id="model-chip" class="chip">未设置模型</span>
+      <span id="permission-chip" class="chip">ask</span>
+      <span id="balance-chip" class="chip" hidden>—</span>
+      <button id="preview-toggle" class="icon-btn" title="预览面板" aria-label="预览面板">▥</button>
+      <button id="settings-toggle" class="icon-btn" title="设置" aria-label="设置">⚙</button>
+    </div>
+  </header>
 
+  <!-- 主区域：左边聊天，右边预览 -->
+  <main class="layout">
+    <section class="chat-pane">
+      <div id="messages" class="messages"></div>
+
+      <form id="composer" class="composer">
+        <textarea id="input" class="composer-input" rows="1"
+                  placeholder="说点什么…（Enter 发送，Shift+Enter 换行）"></textarea>
+        <div class="composer-actions">
+          <button type="button" id="abort-btn" class="btn btn-ghost" hidden>停止</button>
+          <button type="submit" id="send-btn" class="btn btn-primary">发送</button>
+        </div>
+      </form>
+    </section>
+
+    <aside id="preview-pane" class="preview-pane" hidden>
+      <div class="pane-header">
+        <span class="pane-title">预览</span>
+        <button id="preview-close" class="icon-btn" aria-label="关闭预览">✕</button>
+      </div>
+      <iframe id="preview-frame" class="preview-frame"
+              sandbox="allow-scripts" title="预览"></iframe>
+    </aside>
+  </main>
+
+  <!-- 设置抽屉 -->
+  <aside id="settings-drawer" class="drawer" hidden>
+    <div class="drawer-header">
+      <span class="drawer-title">设置</span>
+      <button id="settings-close" class="icon-btn" aria-label="关闭设置">✕</button>
+    </div>
+    <div class="drawer-body">
+      <label class="field">
+        <span class="field-label">API Key</span>
+        <input id="cfg-apiKey" class="field-input" type="password" placeholder="sk-..." autocomplete="off">
+      </label>
+      <label class="field">
+        <span class="field-label">Base URL</span>
+        <input id="cfg-baseUrl" class="field-input" type="text" placeholder="https://api.openai.com/v1">
+      </label>
+      <label class="field">
+        <span class="field-label">模型</span>
+        <input id="cfg-model" class="field-input" type="text" placeholder="gpt-4o-mini">
+      </label>
+      <label class="field">
+        <span class="field-label">工作目录</span>
+        <input id="cfg-workspace" class="field-input" type="text" placeholder="/path/to/workspace">
+      </label>
+      <label class="field">
+        <span class="field-label">权限模式</span>
+        <select id="cfg-permissionMode" class="field-input">
+          <option value="ask">ask — 每次询问</option>
+          <option value="auto">auto — 自动允许</option>
+          <option value="readonly">readonly — 只读</option>
+        </select>
+      </label>
+      <label class="field">
+        <span class="field-label">系统提示词</span>
+        <textarea id="cfg-systemPrompt" class="field-input" rows="5"></textarea>
+      </label>
+      <button id="settings-save" class="btn btn-primary drawer-save">保存</button>
+    </div>
+  </aside>
+
+  <!-- 审批弹窗 -->
+  <div id="approval-modal" class="modal" hidden>
+    <div class="modal-box">
+      <h3 id="approval-title" class="modal-title">需要审批</h3>
+      <pre id="approval-detail" class="modal-detail"></pre>
+      <textarea id="approval-answer" class="modal-input" rows="3" hidden placeholder="输入你的回答…"></textarea>
+      <div class="modal-actions">
+        <button id="approval-deny" class="btn btn-ghost">拒绝</button>
+        <button id="approval-allow-once" class="btn btn-ghost">本次允许</button>
+        <button id="approval-allow-always" class="btn btn-primary">始终允许</button>
+        <button id="approval-submit" class="btn btn-primary" hidden>提交回答</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
