@@ -11,11 +11,14 @@ const CONFIG_PATH = join(HELIX_DIR, 'config.json');
 // 默认配置：第一次运行时用这个
 const DEFAULT_CONFIG = {
   apiKey: '',
-  baseUrl: 'https://api.openai.com/v1',
-  model: 'gpt-4o-mini',
+  baseUrl: 'https://api.deepseek.com/v1',
+  model: 'deepseek-flash',
   workspace: process.cwd(),
   systemPrompt: '你是一个本地 AI 助手，可以调用工具帮助用户。回答用中文，简洁清楚。',
-  permissionMode: 'ask', // ask | auto | readonly
+  permissionMode: 'ask',
+  temperature: 0.7,
+  maxTokens: 4096,
+  cmdTimeout: 30,
 };
 
 // 读取配置。文件不存在就返回默认值
@@ -34,10 +37,23 @@ export async function loadConfig() {
   }
 }
 
-// 保存配置。只覆盖传进来的字段，其他保持不变
+// 保存配置。只覆盖传进来的字段，且空字符串不覆盖已有的非空值
 export async function saveConfig(partial) {
   const current = await loadConfig();
-  const next = { ...current, ...partial };
+
+  // 过滤：空字符串 / null / undefined 的字段一律不写入
+  // 原因：前端输入框为空时会传来 ""，不能让它把有效配置抹掉
+  const cleaned = {};
+  for (const [key, value] of Object.entries(partial || {})) {
+    if (value === '' || value === null || value === undefined) continue;
+    cleaned[key] = value;
+  }
+
+  const next = { ...current, ...cleaned };
+
+  // 关键字段兜底，确保最终值有效
+  if (!next.baseUrl) next.baseUrl = DEFAULT_CONFIG.baseUrl;
+  if (!next.model) next.model = DEFAULT_CONFIG.model;
 
   // 确保 ~/.helix 目录存在
   if (!existsSync(HELIX_DIR)) {
