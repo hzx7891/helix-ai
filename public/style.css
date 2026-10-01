@@ -752,3 +752,8 @@ textarea.field-input {
   }
   .chip { display: none; }
 }
+
+/* 修复：带 hidden 属性的元素必须真的隐藏 */
+[hidden] {
+  display: none !important;
+}
