@@ -1,15 +1,20 @@
 // server/tool/index.js —— 工具注册表 + 分发器
 
 import * as fileTools from './file.js';
+import * as shellTools from './shell.js';
 import { requestApproval, makeRequestId } from '../approval.js';
 
+// 只读工具：不碰文件系统写入，不执行命令
+// system_info 只读进程信息，也放这里
 export const READONLY_TOOLS = new Set([
   'list_dir',
   'read_file',
   'web_search',
   'fetch_url',
+  'system_info',
 ]);
 
+// 写/执行工具：危险，需要审批
 export const WRITE_TOOLS = new Set([
   'write_file',
   'edit_file',
@@ -21,11 +26,14 @@ const registry = {
   list_dir: fileTools.list_dir,
   read_file: fileTools.read_file,
   write_file: fileTools.write_file,
+  run_command: shellTools.run_command,
+  system_info: shellTools.system_info,
 };
 
 export function getToolDefinitions() {
   return [
     ...fileTools.definitions,
+    ...shellTools.definitions,
   ];
 }
 
