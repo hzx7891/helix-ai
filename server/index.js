@@ -10,6 +10,9 @@ import { loadConfig, saveConfig, redactConfig } from './config.js';
 import { streamChat } from './llm.js';
 import { getToolDefinitions, executeTool } from './tool/index.js';
 import { resolveApproval, cancelAll } from './approval.js';
+import { fetchBalance } from './balance.js';
+import * as session from './session.js';
+import { getToolStats, getRecentCalls, resetAudit } from './tool/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -25,29 +28,16 @@ function placeholderPage() {
   <meta charset="UTF-8">
   <title>Helix</title>
   <style>
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #0a0c10;
-      color: #e6e8ec;
-      font-family: -apple-system, "Segoe UI", "PingFang SC", sans-serif;
-    }
-    .box { text-align: center; }
-    .logo { font-size: 64px; margin-bottom: 16px; }
-    h1 { margin: 0 0 8px; font-size: 24px; font-weight: 600; }
-    p { margin: 0; color: #8b939e; font-size: 14px; }
+    body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+           background:#0a0c10; color:#e6e8ec; font-family:-apple-system,"Segoe UI","PingFang SC",sans-serif; }
+    .box { text-align:center; }
+    .logo { font-size:64px; margin-bottom:16px; }
+    h1 { margin:0 0 8px; font-size:24px; font-weight:600; }
+    p { margin:0; color:#8b939e; font-size:14px; }
   </style>
 </head>
-<body>
-  <div class="box">
-    <div class="logo">🧬</div>
-    <h1>Helix 后端已启动</h1>
-    <p>前端界面还在开发中，请稍后回来查看。</p>
-  </div>
-</body>
+<body><div class="box"><div class="logo">🧬</div><h1>Helix 后端已启动</h1>
+<p>前端界面还在开发中，请稍后回来查看。</p></div></body>
 </html>`;
 }
 
@@ -68,11 +58,7 @@ export function startServer({ port, token }) {
     app.use(express.json({ limit: '5mb' }));
 
     app.get('/api/health', (req, res) => {
-      res.json({
-        ok: true,
-        version: VERSION,
-        uptime: process.uptime(),
-      });
+      res.json({ ok: true, version: VERSION, uptime: process.uptime() });
     });
 
     app.get('/api/config', async (req, res) => {
@@ -89,6 +75,71 @@ export function startServer({ port, token }) {
         const partial = req.body || {};
         const next = await saveConfig(partial);
         res.json(redactConfig(next));
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // 查余额
+    app.get('/api/balance', async (req, res) => {
+      try {
+        const config = await loadConfig();
+        const result = await fetchBalance(config);
+        res.json(result);
+      } catch (err) {
+        res.json({ supported: false, reason: err.message });
+      }
+    });
+
+    // 工具调用统计（审计）
+    app.get('/api/stats', (req, res) => {
+      try {
+        res.json(getToolStats());
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // 最近 N 条工具调用记录
+    app.get('/api/audit', (req, res) => {
+      try {
+        const limit = parseInt(req.query.limit, 10) || 50;
+        res.json({ records: getRecentCalls(limit) });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // 清空审计（调试用）
+    app.post('/api/audit/reset', (req, res) => {
+      try {
+        resetAudit();
+        res.json({ ok: true });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.get('/api/session/list', async (req, res) => {
+      try {
+        res.json({ sessions: await session.listSessions() });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.get('/api/session/load/:name', async (req, res) => {
+      try {
+        res.json(await session.loadSession(req.params.name));
+      } catch (err) {
+        res.status(404).json({ error: err.message });
+      }
+    });
+
+    app.post('/api/session/delete/:name', async (req, res) => {
+      try {
+        await session.deleteSession(req.params.name);
+        res.json({ ok: true });
       } catch (err) {
         res.status(500).json({ error: err.message });
       }
@@ -116,18 +167,15 @@ export function startServer({ port, token }) {
         socket.destroy();
         return;
       }
-
       if (url.pathname !== '/ws') {
         socket.destroy();
         return;
       }
-
       if (url.searchParams.get('token') !== token) {
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
         socket.destroy();
         return;
       }
-
       wss.handleUpgrade(req, socket, head, (ws) => {
         wss.emit('connection', ws, req);
       });
@@ -233,17 +281,8 @@ export function startServer({ port, token }) {
                   args: tc.arguments,
                 });
                 const msg = '参数不是合法 JSON，无法执行';
-                sendJson(ws, {
-                  type: 'tool_end',
-                  callId: tc.id,
-                  ok: false,
-                  result: msg,
-                });
-                history.push({
-                  role: 'tool',
-                  tool_call_id: tc.id,
-                  content: msg,
-                });
+                sendJson(ws, { type: 'tool_end', callId: tc.id, ok: false, result: msg });
+                history.push({ role: 'tool', tool_call_id: tc.id, content: msg });
                 continue;
               }
 
@@ -269,6 +308,12 @@ export function startServer({ port, token }) {
                 content: result,
               });
             }
+          }
+
+          try {
+            await session.saveSession(history);
+          } catch (err) {
+            console.error('[session] 保存失败：', err.message);
           }
 
           sendJson(ws, { type: 'done', reason: 'complete' });
