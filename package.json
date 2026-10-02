@@ -1,6 +1,6 @@
 {
   "name": "helix-ai-cn",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "本地优先的 AI Agent 工作台，能读文件、跑命令、搜网页、渲染预览，所有数据留在本地",
   "type": "module",
   "bin": {
