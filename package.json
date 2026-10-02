@@ -1,7 +1,7 @@
 {
-  "name": "helix-ai",
-  "version": "0.0.1",
-  "description": "本地优先的 AI Agent 工作台",
+  "name": "helix-ai-cn",
+  "version": "0.4.0",
+  "description": "本地优先的 AI Agent 工作台，能读文件、跑命令、搜网页、渲染预览，所有数据留在本地",
   "type": "module",
   "bin": {
     "helix": "bin/helix.js"
@@ -15,15 +15,18 @@
     "agent",
     "cli",
     "local-first",
-    "helix"
+    "llm",
+    "deepseek",
+    "helix",
+    "中文"
   ],
   "author": "hzx7891",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hzx7891/helix-ai.git"
+    "url": "git+https://github.com/hzx7891/helix-ai.git"
   },
-  "homepage": "https://github.com/hzx7891/helix-ai",
+  "homepage": "https://github.com/hzx7891/helix-ai#readme",
   "bugs": {
     "url": "https://github.com/hzx7891/helix-ai/issues"
   },
