@@ -8,11 +8,15 @@ import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { loadConfig, saveConfig, redactConfig } from './config.js';
 import { streamChat } from './llm.js';
+import { getToolDefinitions, executeTool } from './tool/index.js';
+import { resolveApproval, cancelAll } from './approval.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PUBLIC_DIR = join(__dirname, '..', 'public');
 const VERSION = '0.0.1';
+
+const MAX_TOOL_ROUNDS = 10;
 
 function placeholderPage() {
   return `<!DOCTYPE html>
@@ -138,9 +142,9 @@ export function startServer({ port, token }) {
         workspace: config.workspace || null,
       });
 
-      // 每个连接一份聊天记录，断开就丢
       const history = [];
       let currentAbort = null;
+      const alwaysAllowed = new Set();
 
       async function handleUserMessage(text) {
         if (currentAbort) {
@@ -156,7 +160,6 @@ export function startServer({ port, token }) {
           return;
         }
 
-        // 第一条消息来时，把系统提示词塞到最前面
         if (history.length === 0) {
           history.push({
             role: 'system',
@@ -167,29 +170,105 @@ export function startServer({ port, token }) {
         history.push({ role: 'user', content: text });
 
         currentAbort = new AbortController();
-        let assistantText = '';
+
+        const toolDefs = getToolDefinitions();
+        const toolContext = {
+          workspace: freshConfig.workspace,
+          config: freshConfig,
+          ws,
+          alwaysAllowed,
+        };
 
         try {
-          const { toolCalls } = await streamChat({
-            config: freshConfig,
-            messages: history,
-            signal: currentAbort.signal,
-            onDelta: (chunk) => {
-              assistantText += chunk;
-              sendJson(ws, { type: 'assistant_delta', text: chunk });
-            },
-            onReasoning: (chunk) => {
-              sendJson(ws, { type: 'reasoning_delta', text: chunk });
-            },
-          });
+          for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+            let assistantText = '';
+            const { toolCalls } = await streamChat({
+              config: freshConfig,
+              messages: history,
+              tools: toolDefs,
+              signal: currentAbort.signal,
+              onDelta: (chunk) => {
+                assistantText += chunk;
+                sendJson(ws, { type: 'assistant_delta', text: chunk });
+              },
+              onReasoning: (chunk) => {
+                sendJson(ws, { type: 'reasoning_delta', text: chunk });
+              },
+            });
 
-          if (assistantText) {
-            history.push({ role: 'assistant', content: assistantText });
-          }
+            if (toolCalls.length === 0) {
+              if (assistantText) {
+                history.push({ role: 'assistant', content: assistantText });
+              }
+              break;
+            }
 
-          if (toolCalls.length > 0) {
-            // 工具系统还没接，先告诉用户
-            sendError(ws, 'AI 想调用工具，但工具系统还没接好', 'TOOLS_NOT_READY');
+            history.push({
+              role: 'assistant',
+              content: assistantText || null,
+              tool_calls: toolCalls.map((tc) => ({
+                id: tc.id,
+                type: 'function',
+                function: {
+                  name: tc.name,
+                  arguments: tc.arguments || '{}',
+                },
+              })),
+            });
+
+            for (const tc of toolCalls) {
+              let args = {};
+              let argsOk = true;
+              try {
+                args = JSON.parse(tc.arguments || '{}');
+              } catch {
+                argsOk = false;
+              }
+
+              if (!argsOk) {
+                sendJson(ws, {
+                  type: 'tool_start',
+                  callId: tc.id,
+                  name: tc.name,
+                  args: tc.arguments,
+                });
+                const msg = '参数不是合法 JSON，无法执行';
+                sendJson(ws, {
+                  type: 'tool_end',
+                  callId: tc.id,
+                  ok: false,
+                  result: msg,
+                });
+                history.push({
+                  role: 'tool',
+                  tool_call_id: tc.id,
+                  content: msg,
+                });
+                continue;
+              }
+
+              sendJson(ws, {
+                type: 'tool_start',
+                callId: tc.id,
+                name: tc.name,
+                args,
+              });
+
+              const { ok, result } = await executeTool(tc.name, args, toolContext);
+
+              sendJson(ws, {
+                type: 'tool_end',
+                callId: tc.id,
+                ok,
+                result,
+              });
+
+              history.push({
+                role: 'tool',
+                tool_call_id: tc.id,
+                content: result,
+              });
+            }
           }
 
           sendJson(ws, { type: 'done', reason: 'complete' });
@@ -215,9 +294,15 @@ export function startServer({ port, token }) {
 
         if (msg.type === 'user_message') {
           await handleUserMessage(String(msg.text || ''));
+        } else if (msg.type === 'approval') {
+          resolveApproval(msg.requestId, msg.decision, msg.answer);
         } else if (msg.type === 'abort') {
           if (currentAbort) currentAbort.abort();
         }
+      });
+
+      ws.on('close', () => {
+        cancelAll();
       });
 
       ws.on('error', (err) => {

@@ -3941,7 +3941,7 @@ el.chipMode.addEventListener('click', () => {
   const next = order[(order.indexOf(cur) + 1) % order.length];
   state.config.permissionMode = next;
   updateModeChip();
-  sendSocket({ type: 'set_mode', mode: next });
+  fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ permissionMode: next }) }).catch(() => {});
   toast('权限模式：' + next + ' · ' + MODE_META[next].desc, 'info', 2400);
 });
 
@@ -4113,7 +4113,7 @@ function buildCommands(){
 function setMode(mode){
   state.config.permissionMode = mode;
   updateModeChip();
-  sendSocket({ type: 'set_mode', mode: mode });
+  fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ permissionMode: mode }) }).catch(() => {});
   toast('权限模式已切换为 ' + mode, 'success', 1800);
 }
 
