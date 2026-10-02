@@ -492,4 +492,834 @@ helix-ai/
 - `permissionMode` 只有 4 个合法值：`ask` / `auto` / `work` / `agent`
 - 配置写入时必须 `chmod 0600`
 - 保存时**空字符串不覆盖已有值**
+- ---
+
+## 十一、权限模式详解
+
+### 11.1 四种模式
+
+| 模式 | 只读工具 | 写/执行工具 | 典型用途 |
+|------|---------|------------|---------|
+| `ask` | ❌ 全部禁用 | ❌ 全部禁用 | 纯聊天，问问题 |
+| `auto` | ✅ 直接放行 | ⚠️ 弹窗审批 | 日常开发（推荐） |
+| `work` | ⚠️ 弹窗审批 | ⚠️ 弹窗审批 | 处理重要仓库 |
+| `agent` | ✅ 直接放行 | ✅ 直接放行 | 完全信任，自动化 |
+
+### 11.2 什么算"只读工具"
+
+- `list_dir`
+- `read_file`
+- `web_search`
+- `fetch_url`
+
+### 11.3 什么算"写/执行工具"
+
+- `write_file`
+- `edit_file`
+- `delete_path`
+- `run_command`
+
+### 11.4 特殊工具（永远需要用户交互）
+
+- `ask_user` —— 无论什么模式，都会弹窗（因为它的目的就是问用户）
+- `render_preview` —— 无论什么模式，都不弹窗（它只是把 HTML 推给前端预览，不碰文件系统）
+
+### 11.5 模式切换
+
+用户在前端点一下切换模式：
+1. 前端更新本地状态
+2. 前端通过 `POST /api/config` 把 `permissionMode` 传给后端
+3. 后端更新运行时状态
+
+**注意**：不能用 WebSocket 的 `set_mode` 消息。契约里没有这个类型。
+
+### 11.6 "始终允许"
+
+用户在审批弹窗里点「始终允许」时：
+- 后端把该工具名加入本次运行的"白名单"
+- 之后该工具的调用**不再弹窗**
+- 白名单只在**本次运行**有效，重启后清空
+- 前端在设置页显示白名单内容
+
+---
+
+## 十二、工具清单详解
+
+### 12.1 list_dir
+
+```json
+{
+  "name": "list_dir",
+  "description": "List directory contents. Returns file names, sizes, and types.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string",
+        "description": "Directory path relative to workspace. Use '.' for current."
+      }
+    },
+    "required": ["path"]
+  }
+}
+```
+
+**返回格式**（示例）：
+```
+./
+  src/          (目录)
+    index.js    (1.2 KB)
+    utils.js    (800 B)
+  package.json  (450 B)
+  README.md     (2.1 KB)
+```
+
+**安全**：path 必须解析后仍在 workspace 内。
+
+### 12.2 read_file
+
+```json
+{
+  "name": "read_file",
+  "description": "Read file content. Max 100KB, truncates beyond.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string",
+        "description": "File path relative to workspace."
+      }
+    },
+    "required": ["path"]
+  }
+}
+```
+
+**返回**：文件内容字符串。超过 100KB 时截断，末尾加 `\n[truncated]`。
+
+**安全**：必须解析后仍在 workspace 内。
+
+### 12.3 write_file
+
+```json
+{
+  "name": "write_file",
+  "description": "Write content to file. Creates if not exists. Requires approval.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "path": { "type": "string" },
+      "content": { "type": "string" }
+    },
+    "required": ["path", "content"]
+  }
+}
+```
+
+**触发审批**。
+
+### 12.4 edit_file
+
+```json
+{
+  "name": "edit_file",
+  "description": "Replace exact text in file. oldText must match exactly once. Requires approval.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "path": { "type": "string" },
+      "oldText": { "type": "string" },
+      "newText": { "type": "string" }
+    },
+    "required": ["path", "oldText", "newText"]
+  }
+}
+```
+
+**规则**：`oldText` 必须**精确匹配一次**。0 次或多次匹配都报错。
+
+**触发审批**。
+
+### 12.5 delete_path
+
+```json
+{
+  "name": "delete_path",
+  "description": "Delete file or directory. Requires approval.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "path": { "type": "string" }
+    },
+    "required": ["path"]
+  }
+}
+```
+
+**触发审批**。
+
+### 12.6 run_command
+
+```json
+{
+  "name": "run_command",
+  "description": "Run shell command. Requires approval. Timeout 30s. Output limit 100KB.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "command": {
+        "type": "string",
+        "description": "Command to execute."
+      },
+      "args": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Command arguments as array. Do NOT use shell syntax."
+      }
+    },
+    "required": ["command"]
+  }
+}
+```
+
+**实现**：
+```javascript
+spawn(command, args || [], {
+  cwd: workspace,
+  shell: false,        // ⚠️ 必须 false
+  timeout: 30000,
+});
+```
+
+**输出**：合并 stdout + stderr，超过 100KB 截断。
+
+**触发审批**。
+
+### 12.7 web_search
+
+```json
+{
+  "name": "web_search",
+  "description": "Search the web. Returns top 5 results (title + URL + snippet).",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "query": { "type": "string" }
+    },
+    "required": ["query"]
+  }
+}
+```
+
+**实现**：第一版用 DuckDuckGo HTML 端点，不用 API Key。
+
+**返回**：
+```
+1. 标题
+   https://example.com/...
+   摘要文字...
+
+2. 标题
+   ...
+```
+
+### 12.8 fetch_url
+
+```json
+{
+  "name": "fetch_url",
+  "description": "Fetch URL and convert to plain text. Max 8000 chars.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "url": { "type": "string" }
+    },
+    "required": ["url"]
+  }
+}
+```
+
+**实现**：
+1. fetch URL
+2. 去掉 `<script>` / `<style>`
+3. 把 HTML 标签换成空格
+4. 合并空白
+5. 截断 8000 字符
+
+### 12.9 render_preview
+
+```json
+{
+  "name": "render_preview",
+  "description": "Render HTML in the preview panel.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "html": {
+        "type": "string",
+        "description": "Full HTML document to preview."
+      }
+    },
+    "required": ["html"]
+  }
+}
+```
+
+**实现**：通过 WebSocket 推 `{type: "preview", html}` 给前端。
+
+**不触发审批**。
+
+### 12.10 ask_user
+
+```json
+{
+  "name": "ask_user",
+  "description": "Ask the user a question. Use when you need clarification.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "question": { "type": "string" }
+    },
+    "required": ["question"]
+  }
+}
+```
+
+**实现**：通过 WebSocket 推 `{type: "approval_request", kind: "question", ...}`。
+
+**永远弹窗**。
+
+---
+
+## 十三、审批流程时序（详细）
+
+### 13.1 权限类审批
+
+**触发**：AI 调用 `write_file` / `edit_file` / `delete_path` / `run_command`
+
+**后端**：
+```javascript
+// 1. 检查权限模式
+if (mode === 'agent') return executeDirectly();
+if (mode === 'auto' && isReadOnlyTool(tool)) return executeDirectly();
+if (mode === 'ask') throw new Error('工具在 ask 模式禁用');
+if (alwaysAllowed.has(tool)) return executeDirectly();
+
+// 2. 生成 requestId
+const requestId = 'req_' + randomHex(8);
+
+// 3. 推给前端
+ws.send(JSON.stringify({
+  type: 'approval_request',
+  requestId,
+  kind: 'permission',
+  title: '权限请求',
+  detail: 'AI 想要执行：' + tool + '\n参数：' + JSON.stringify(args, null, 2),
+  tool,
+}));
+
+// 4. 等待前端回复（Promise）
+const decision = await waitForApproval(requestId);
+
+// 5. 根据 decision 处理
+if (decision === 'deny') throw new Error('用户拒绝');
+if (decision === 'allow_always') alwaysAllowed.add(tool);
+return executeDirectly();
+```
+
+**前端**：
+```javascript
+// 收到 approval_request 时：
+showApprovalModal({
+  title, detail,
+  buttons: [
+    { text: '拒绝', decision: 'deny' },
+    { text: '本次允许', decision: 'allow' },
+    { text: '始终允许', decision: 'allow_always' },
+  ]
+});
+
+// 用户点击后：
+ws.send(JSON.stringify({
+  type: 'approval',
+  requestId,
+  decision,
+}));
+```
+
+### 13.2 提问类审批
+
+**触发**：AI 调用 `ask_user`
+
+**后端**：
+```javascript
+const requestId = 'req_' + randomHex(8);
+ws.send(JSON.stringify({
+  type: 'approval_request',
+  requestId,
+  kind: 'question',
+  title: '需要你的输入',
+  detail: question,
+}));
+const { answer } = await waitForApproval(requestId);
+return answer;  // 把用户的回答当工具结果返回给 AI
+```
+
+**前端**：显示 textarea + 提交按钮，用户输入后通过 `approval` 消息回传 `answer`。
+
+### 13.3 超时处理
+
+- 审批等待超过 5 分钟 → 自动拒绝，AI 收到 `{ok: false, result: "用户未响应，已超时"}`
+- 用户中断（点停止）→ 所有 pending 审批取消
+
+---
+
+## 十四、错误码清单
+
+| code | 说明 | 前端显示 |
+|------|------|---------|
+| `INVALID_API_KEY` | API Key 错误 | "API Key 无效，请检查设置" |
+| `NO_API_KEY` | 未配置 API Key | "请先在设置里填 API Key" |
+| `MODEL_NOT_FOUND` | 模型名错误 | "模型名错误，请检查设置" |
+| `RATE_LIMIT` | 请求过快 | "请求过快，请稍后重试" |
+| `QUOTA_EXCEEDED` | 额度用尽 | "账户额度不足" |
+| `NETWORK_ERROR` | 网络错误 | "网络连接失败" |
+| `PATH_OUTSIDE_WORKSPACE` | 路径越界 | "文件路径超出工作目录" |
+| `TOOL_NOT_FOUND` | 工具不存在 | "AI 调用了未知工具" |
+| `APPROVAL_TIMEOUT` | 审批超时 | "审批超时" |
+| `USER_ABORTED` | 用户中止 | （不显示错误，正常结束） |
+| `UNKNOWN` | 其他 | 显示原始 message |
+
+---
+
+## 十五、当前进度
+
+### ✅ 已完成
+
+- `README.md` —— 项目介绍
+- `LICENSE` —— MIT
+- `.gitignore` —— 排除敏感文件
+- `package.json` —— 依赖和入口
+- `bin/helix.js` —— 启动入口，找端口、开浏览器
+- `server/index.js` —— HTTP + WebSocket 服务
+- `server/config.js` —— 读写配置，Key 脱敏
+- `server/llm.js` —— 调用模型，流式返回（已跑通 DeepSeek）
+- `public/index.html` —— 完整前端（单文件，163 KB，含样式 + 逻辑 + Markdown 渲染）
+
+### ⏳ 待做（按顺序）
+
+1. `server/tool/index.js` —— 工具注册表
+2. `server/tool/file.js` —— 文件工具（list_dir、read_file、write_file、edit_file、delete_path）
+3. `server/tool/shell.js` —— 命令工具（run_command）
+4. `server/tool/web.js` —— 联网工具（web_search、fetch_url）
+5. `server/approval.js` —— 权限审批调度
+6. `server/balance.js` —— 余额查询
+7. `server/llm.js` 改造 —— 支持工具调用循环
+8. v1.0.0 发布
+
+### 📋 尚未实现但已规划
+
+- `render_preview` 工具
+- `ask_user` 工具
+- 语音朗读（前端已做，用 Web Speech API）
+- 一键启动脚本 `start.bat`（Windows）
+- Token 用量显示
+- 四模式完整支持
+
+---
+
+## 十六、开发顺序（严格按此，每步可独立测试）
+
+| 步骤 | 文件 | 验收标准 | commit 建议 |
+|------|------|---------|------------|
+| 0 | README + LICENSE + .gitignore | 仓库主页清晰，Key 不会上传 | 初始化仓库 |
+| 1 | package.json + bin/helix.js + server/index.js | npx 能启动，浏览器打开 | 搭建后端骨架 |
+| 2 | server/config.js + config 接口 | 能读写配置，Key 脱敏 | 实现配置读写 |
+| 3 | WebSocket 握手 + ready | 浏览器连上收到 ready | 实现 WebSocket 连接 |
+| 4 | server/llm.js + 最简对话 | 流式回答，Markdown 渲染 | 接入 AI 模型 |
+| 5 | server/tool/index.js + file.js | AI 能列目录、读文件 | 实现工具系统 |
+| 6 | server/approval.js | 写文件触发审批 | 实现权限审批 |
+| 7 | server/tool/shell.js | 命令执行、超时、审批 | 实现命令执行 |
+| 8 | server/tool/web.js | 搜索、抓网页 | 实现联网 |
+| 9 | render_preview + ask_user | 预览面板出现内容 | 实现预览和提问 |
+| 10 | GET /api/balance | 显示余额 | 实现余额查询 |
+| 11 | 打包发布 v0.1.0 | npx 一条命令跑起来 | 发布 v0.1.0 |
+
+**每完成一步，AI 要告诉用户**：
+1. 这一步做了什么
+2. 怎么测试它
+3. 下一步做什么
+4. 建议的 commit 信息（中文，一句话）
+
+---
+
+## 十七、已知问题与 Bug 库
+
+### 17.1 前端 bug（待修）
+
+**Bug #1：设置保存时空字符串覆盖有效配置**
+
+- **现象**：用户在设置页保存时，如果 Base URL 输入框是空的，`baseUrl` 被存成 `""`
+- **原因**：前端把空字符串原样发给后端
+- **修复**：前端改成"值为空时跳过该字段，不放进 payload"
+- **后端兜底**：`saveConfig` 里加空字符串过滤（已在最新版实现）
+
+**Bug #2：placeholder 颜色太接近真实输入**
+
+- **现象**：深色主题下，占位提示和真实输入看起来一样
+- **修复**：placeholder 颜色调浅（`opacity: 0.5` 或更浅的灰）
+
+**Bug #3：前端有未定义的消息类型 `set_mode`**
+
+- **现象**：`public/index.html` 里有 `sendSocket({ type: 'set_mode', ... })`
+- **原因**：前端 AI 自己发明的，不在契约里
+- **修复**：前端删掉这两行（权限模式已通过 `POST /api/config` 传递）
+
+### 17.2 后端 bug（暂无）
+
+### 17.3 环境问题
+
+**Termux 上 Node.js 版本很新（v26.4.0）**
+- 不代表所有用户都这么新
+- 后端代码要用 Node 20+ 兼容的语法
+- 不要用 Node 21+ 才有的新特性
+
+**github.dev 没有终端**
+- 用户只能贴文件，不能运行
+- 真正测试在 Termux 或本地终端
+
+---
+
+## 十八、沟通规则（必须遵守）
+
+### 18.1 语言
+
+- **用中文**
+- 遇到术语先用一句话解释
+- 例：
+  > WebSocket 就像两人打电话，一直通着；HTTP 就像写信，发一封收一封。
+  > 工具调用就像你让助手去拿文件，他回来告诉你文件里写了什么。
+  > 权限审批就像家长同意，孩子要做危险的事之前必须先问一声。
+
+### 18.2 交付节奏
+
+- **一次只给一个文件**
+- 不要一次给多个，他会跟不上
+- 每个文件说清楚：放哪、干什么、怎么测试、下一步、commit 信息
+
+### 18.3 教学方式
+
+- 不假设他会命令行
+- 所有操作按"点哪里、贴哪里"讲
+- 遇到报错：
+  1. 让他贴完整错误信息
+  2. 用一句话解释错误是什么意思
+  3. 告诉他改哪个文件、改哪一行
+  4. 不要一次性改三个地方，先改最可能的那一个
+
+### 18.4 鼓励方式
+
+- 不过度吹捧
+- 他不需要虚假的赞美
+- 他看到真实进展就好
+- 例：
+  > 你今天跑通了本地 AI Agent 的完整链路，这是真实的进展。
+  > 你不是在指挥 AI 写代码，你是在做真正的工程活。
+
+### 18.5 判断取舍
+
+- 如果他想加新功能，先判断这是 P0 / P1 / P2 哪个阶段
+- 如果是 P1 / P2，告诉他：
+  > 这个很好，但我们先记在 `docs/idea.md` 里，等第一版跑通再加。
+- 不要让他分心
+
+### 18.6 如果他犹豫
+
+用现实判断：
+- "第一版不做这个" 比 "你可以试试" 更有用
+- 给他一个最小的、5 分钟能做完的任务
+
+### 18.7 如果他遇到 bug
+
+1. 让他把完整错误信息贴给你
+2. 用一句话解释错误是什么意思
+3. 告诉他改哪个文件、改哪一行
+4. 不要一次性改三个地方，先改最可能的那一个
+
+---
+
+## 十九、AI 交付格式
+
+每次给一个文件时，用这个格式：
+
+```
+─────────────────────────────
+【第 N 步】文件名：xxx
+─────────────────────────────
+放在哪：具体路径
+作用：一句话说明
+─────────────────────────────
+完整代码：
+（代码块，可整段复制）
+─────────────────────────────
+怎么测试：在 github.dev 里做什么操作，
+          看到什么效果算成功
+下一步：下一步该建哪个文件
+commit 建议：「完成 xxx」
+─────────────────────────────
+```
+
+**注意**：
+- 代码块必须能整段复制（不要插入解释）
+- 代码里的注释要清楚
+- 中文注释解释"为什么"，英文注释解释"是什么"
+
+---
+
+## 二十、术语表
+
+| 术语 | 一句话解释 |
+|------|-----------|
+| API Key | 你的钥匙，能让程序用你的模型账号 |
+| Base URL | 模型服务的网址 |
+| WebSocket | 两人打电话，一直通着 |
+| HTTP | 写信，发一封收一封 |
+| Token | AI 的计费单位，也是它的"记忆块" |
+| 流式 | AI 一个字一个字往外吐 |
+| 工具调用 | AI 让你帮它拿东西 |
+| 审批 | 危险操作前先问一声 |
+| Workspace | AI 能操作的目录 |
+| Markdown | 一种轻量的排版语法 |
+| ESM | JavaScript 的模块规范，用 import/export |
+| CJS | 老式 JavaScript 模块，用 require |
+| 依赖 | 别人写好的代码库，你引用它 |
+| npx | 临时下载并运行一个 npm 包 |
+| npm | Node.js 的包管理器 |
+| 端口 | 电脑上不同服务的门牌号 |
+| token（认证） | 临时的通行证 |
+| 脱敏 | 把敏感信息遮掉 |
+| 沙盒 | 隔离的、安全的环境 |
+| 预览 | 把 HTML 显示在侧边面板里 |
+| 缓存命中 | 复用之前算过的结果，省钱又快 |
+
+---
+
+## 二十一、不要做的事
+
+- 不接 Supabase
+- 不做登录系统
+- 不做云同步
+- 不做多人协作
+- 不做移动端 App
+- 不做浏览器插件
+- 不做 Electron / Tauri 桌面应用
+- 不引入 TypeScript
+- 不引入构建工具（Vite / Webpack）
+- 不引入 ORM
+- 不引入数据库
+- 不引入 monorepo
+- 不擅自发明 WebSocket 消息类型
+- 不改契约里的字段名
+- 不把 API Key 发到前端
+- 不在代码里硬编码 API Key
+- 不用 `shell: true` 拼命令
+- 不用 `exec` 执行命令
+- 不让文件操作逃出 workspace
+
+---
+
+## 二十二、P0 / P1 / P2 判断标准
+
+**P0 —— 第一版必须做出来的**
+- npx 启动、浏览器自动打开
+- WebUI 设置页
+- 聊天 + 流式回答 + Markdown 渲染
+- 10 个工具调用
+- 权限审批弹窗
+- 4 种权限模式
+- 右侧预览面板
+- 余额查询
+- 中断按钮
+
+**P1 —— 第二阶段**
+- 聊天记录保存到后端
+- 会话列表、切换历史
+- 自定义搜索引擎
+- 外挂识图模型
+- Git 平台自动化
+- AI 浏览器（能打开网页、点击、截图）
+
+**P2 —— 第三阶段**
+- 实时预览双向编辑
+- 多服务商切换
+- HTTPS 隧道
+- 多用户会话隔离
+
+**判断规则**：
+- 用户提出新想法 → 先问"这是哪个阶段"
+- 如果是 P1 / P2 → 记进 `docs/idea.md`，不实现
+- 如果是 P0 → 看它是否阻塞当前正在做的步骤
+- 阻塞 → 先做；不阻塞 → 记下来，做完当前的再做
+
+---
+
+## 二十三、版本与提交规范
+
+### 23.1 版本号
+
+- 格式：`主版本.次版本.修订号`
+- 当前：`v0.0.1`
+- 改动协议：+0.0.1
+- 完成 P0：升到 `v1.0.0`
+
+### 23.2 commit 信息
+
+- **中文**，一句话
+- 格式：动词 + 对象
+- 例：
+  - 「初始化仓库」
+  - 「搭建后端骨架」
+  - 「实现配置读写」
+  - 「实现 WebSocket 连接」
+  - 「接入 AI 模型，实现流式对话」
+  - 「实现工具系统与文件读取」
+  - 「实现权限审批」
+  - 「实现命令执行」
+  - 「实现联网搜索与网页抓取」
+  - 「实现预览渲染与用户提问」
+  - 「实现余额查询」
+  - 「发布 v0.1.0」
+
+### 23.3 仓库操作流程
+
+用户的日常操作：
+
+1. 在 GitHub 打开 `helix-ai` 仓库
+2. 按键盘 `.` 进入 github.dev
+3. 在左侧文件树里新建/编辑文件
+4. 把 AI 给的代码粘进去
+5. 在源代码管理面板写 commit 信息
+6. 点 Commit & Push
+
+**注意**：
+- github.dev **没有终端**
+- 不能运行 npm install
+- 不能运行后端
+- 真正的测试要在 Termux 或本地终端
+
+---
+
+## 二十四、常见问题 FAQ
+
+**Q：为什么不一次给我多个文件？**
+
+A：用户是 11 岁孩子，一次只跟得上一个文件。多个文件会让他迷失，粘贴时容易漏掉或贴错。
+
+**Q：为什么后端只能有两个依赖？**
+
+A：降低复杂度，减少安装失败的可能。用户不一定有稳定的网络环境。
+
+**Q：为什么不用 TypeScript？**
+
+A：用户看不懂 TS 语法。用原生 JS，他能看懂的代码更利于他理解。
+
+**Q：为什么前端不用框架？**
+
+A：不用构建工具，代码贴进去就能跑。用户在 github.dev 里没有终端，跑不了 build。
+
+**Q：为什么不上云？**
+
+A：见第 4.4 节。API Key 不能上云，免费版扛不住，复杂度太高。
+
+**Q：为什么 AI 只能操作用户的 workspace？**
+
+A：安全。不能让 AI 随意读写用户电脑上任何位置的文件。
+
+**Q：为什么命令执行禁止 shell: true？**
+
+A：防止命令注入。如果 AI 说 `run_command("rm -rf /")`，用 shell 拼接会直接执行。用参数数组则安全得多。
+
+**Q：为什么配置文件要 0600 权限？**
+
+A：API Key 存在里面。0600 表示只有本用户能读写，其他用户看不到。
+
+**Q：如果 AI 想加一个消息类型怎么办？**
+
+A：先说明，等对方（前端或后端）确认，加入契约，再实现。不能自己发明。
+
+**Q：如果用户报错，我应该先改哪里？**
+
+A：先改最可能的那一处。不要一次改三个地方，因为改多了你不知道哪个起了作用。
+
+**Q：如果用户说"我想放弃"怎么办？**
+
+A：
+1. 不要虚假鼓励
+2. 用事实说话：
+   - 你已经做出了 StarryChat
+   - 你已经设计了 Helix 的品牌图标
+   - 你已经写好了完整的技术方案
+   - 你只是还没开始写第一行代码
+3. 给他一个最小的、5 分钟能做完的任务
+4. 让他重新感受"我能做出来"
+
+**Q：如果用户想加 P1 / P2 的功能怎么办？**
+
+A：告诉他"这个很好，但我们先记在 `docs/idea.md` 里，等第一版跑通再加"。不要让他分心。
+
+**Q：如何验证我写的代码是对的？**
+
+A：让用户在 Termux 里跑：
+```bash
+cd ~/helix-ai
+node bin/helix.js
+```
+然后在手机浏览器打开 `http://127.0.0.1:3000/?token=xxx`。
+
+**Q：如果改动涉及前后端两侧怎么办？**
+
+A：
+1. 在这个对话里说明改动
+2. 让用户把改动转达给另一个对话窗口的 AI
+3. 两侧都改完，再测试
+4. 测试通过，双方版本号 +0.0.1
+
+**Q：如果用户提到"契约"是什么？**
+
+A：本文件第八、九节的 WebSocket 消息协议和 HTTP 接口。是前后端双方都必须遵守的规则。
+
+**Q：如果用户问"缓存命中率"是什么？**
+
+A：用考试比喻：
+> 想象你考试时带了一张小抄（缓存）。老师问一道题，如果你小抄上有现成答案，直接抄（命中），又快又省力。如果小抄上没有，你得当场翻书重新算（未命中），又慢又费劲。
+> 在 AI 里，缓存命中就是"你发的问题，AI 之前已经算过一遍了"，直接复用，速度快，价格只有未命中的十分之一。
+
+**Q：如果用户问"Token 利用率"是什么？**
+
+A：
+> Token 是 AI 的"计费字数"。你对 AI 说的每句话、AI 回你的每句话，都要按 Token 收费。
+> "把 Token 利用率压缩到极致"就是"想办法少花钱"。
+> 具体做法：截断工具结果、限制聊天历史、优先用浏览器本地能力（如 TTS）。
+
+**Q：如果用户问"我们和竞品比怎么样"？**
+
+A：老实回答：
+- 现有工具如 OpenCode、Cursor、Claude Code 都很强，Star 数很高
+- Helix 的差异化在于：**完全本地、开源免费、代码能看懂、中文友好、npx 一键跑**
+- 不和它们正面竞争，只在一个小点上更懂用户
+- 第一版只求"能跑通"，不追求对标
+
+---
+
+## 结尾
+
+**这份文档是项目的总纲。每次开新对话，第一句话就是：**
+
+> 请先读 https://raw.githubusercontent.com/hzx7891/helix-ai/main/docs/HANDOFF.md 再开始工作。
+
+**文档会随项目进展更新。修改文档后，把版本号 +0.1。**
+
+**当前文档版本：v1.0**
+
+**END OF HANDOFF**
 
