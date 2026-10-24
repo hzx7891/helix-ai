@@ -5,16 +5,24 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![npm](https://img.shields.io/badge/npm-helix--ai--cn-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/helix-ai-cn)
+<<<<<<< HEAD
 [![Version](https://img.shields.io/badge/version-0.6.0-ff69b4)](https://github.com/hzx7891/helix-ai)
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#贡献)
 [![Made with ❤️](https://img.shields.io/badge/Made%20with-%E2%9D%A4%EF%B8%8F-red.svg)](https://github.com/hzx7891/helix-ai)
 
 一条命令启动，在浏览器里和 AI 聊天。  
+<<<<<<< HEAD
 AI 可以读写你电脑上的文件、执行命令、搜索网页、渲染预览、在终端里跑给你看。  
 **所有数据留在本地。**
 
 > **v0.6.0 史诗级重构**：多模型热切换、极客 CLI 客户端、内嵌拟真终端、UUID 会话隔离、AI 自动标题、任务块、流式体验三大 Bug 修复。  
 > 这是 Helix 迄今为止最硬核的一个版本。
+=======
+AI 可以读写你电脑上的文件、执行命令、搜索网页、渲染预览。  
+**所有数据留在本地。**
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ---
 
@@ -34,8 +42,11 @@ AI 可以读写你电脑上的文件、执行命令、搜索网页、渲染预�
   - [设置抽屉](#设置抽屉)
   - [命令面板](#命令面板)
   - [查找栏](#查找栏)
+<<<<<<< HEAD
 - [多模型配置（Profiles）](#多模型配置profiles)
 - [CLI 客户端](#cli-客户端)
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 - [内置工具](#内置工具)
 - [工具详解](#工具详解)
   - [list_dir](#list_dir)
@@ -50,7 +61,10 @@ AI 可以读写你电脑上的文件、执行命令、搜索网页、渲染预�
   - [render_preview](#render_preview)
   - [ask_user](#ask_user)
   - [whoami](#whoami)
+<<<<<<< HEAD
   - [update_tasks](#update_tasks)
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 - [权限模式](#权限模式)
 - [审批流程](#审批流程)
 - [安全与隐私](#安全与隐私)
@@ -93,11 +107,17 @@ npx helix-ai-cn
 
 和普通聊天机器人的区别：**Helix 里的 AI 能动手。**
 
+<<<<<<< HEAD
 它可以列目录、读文件、写文件、跑命令、搜网页、抓网页、在右侧面板渲染 HTML、在工具卡片里展开一个**真实的拟真终端**、向你提问、查询自己的身份、维护任务清单。
 
 **默认情况下，每一次“写入”和“执行”，它都会先问你一句。**（`agent` 模式除外，见 [权限模式](#权限模式)。）
 
 **v0.6.0 更进一步**：你可以在设置里无限添加模型配置（Profiles），顶部菜单一键热切换；也可以在终端里直接用 CLI 客户端聊天，纯文本流式输出，带跨会话记忆。浏览器不再是唯一入口。
+=======
+它可以列目录、读文件、写文件、跑命令、搜网页、抓网页、在右侧面板渲染 HTML、向你提问、查询自己的身份。
+
+**默认情况下，每一次“写入”和“执行”，它都会先问你一句。**（`agent` 模式除外，见 [权限模式](#权限模式)。）
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ---
 
@@ -108,7 +128,11 @@ Helix 不打算正面打败谁，它只想把几件小事做好。
 
 ### 本地优先
 
+<<<<<<< HEAD
 API Key 存在 `~/.helix/config.json`，聊天记录存在 `~/.helix/sessions/<uuid>/`，工作文件留在你自己的硬盘上。没有登录，没有同步，没有云端存储。断网也能用（配合本地模型时）。
+=======
+API Key 存在 `~/.helix/config.json`，聊天记录存在 `~/.helix/sessions/`，工作文件留在你自己的硬盘上。没有登录，没有同步，没有云端存储。断网也能用（配合本地模型时）。
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ### 不上云
 
@@ -124,6 +148,7 @@ MIT 协议。源代码全部公开。npx 一行启动，不装任何额外东西
 
 ### 极致轻量
 
+<<<<<<< HEAD
 npm 发布包 **122.7 kB**，解压后 **440.3 kB**，运行时只有 2 个依赖（express + ws）。没有框架，没有构建工具，没有 CDN。CLI 客户端同样零额外依赖。
 
 ### 终端原生
@@ -133,6 +158,13 @@ v0.6.0 新增 `run.mjs` 和 `chat.mjs`。在 Termux 或任何终端里，不需�
 ### 高度可定制
 
 系统提示词、工具、模型、工作目录都能改。工具注册表是开放的，加一个工具只需要写一个文件。多模型配置随便加，热切换不重启。
+=======
+发布包 87 KB，解压后 312 KB，运行时只有 2 个依赖（express + ws）。没有框架，没有构建工具，没有 CDN。
+
+### 高度可定制
+
+系统提示词、工具、模型、工作目录都能改。工具注册表是开放的，加一个工具只需要写一个文件。
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ### 中文友好
 
@@ -143,6 +175,7 @@ v0.6.0 新增 `run.mjs` 和 `chat.mjs`。在 Termux 或任何终端里，不需�
 ## 特性一览
 
 - ✅ **流式对话** — AI 的回答一个字一个字往外吐，实时渲染 Markdown
+<<<<<<< HEAD
 - ✅ **多模型热切换** — 🆕 无限添加 Profiles（DeepSeek / Kimi / OpenAI / Ollama…），顶部菜单一键切换，每个对话独立绑定，无需重启
 - ✅ **极客 CLI 客户端** — 🆕 `run.mjs` / `chat.mjs`，终端里自动拉起后端并连接 WebSocket，纯文本流式输出，带跨会话记忆
 - ✅ **内嵌拟真终端** — 🆕 AI 执行 `run_command` 时，工具卡片里展开真实终端，支持 ANSI 颜色、进度条覆盖，4 套拟真皮肤
@@ -155,6 +188,13 @@ v0.6.0 新增 `run.mjs` 和 `chat.mjs`。在 Termux 或任何终端里，不需�
 - ✅ **4 种权限模式** — `ask` / `auto` / `work` / `agent`
 - ✅ **右侧预览面板** — AI 生成的 HTML 直接渲染，可拖拽调宽
 - ✅ **会话持久化** — 保存在 `~/.helix/sessions/<uuid>/`，重启不丢
+=======
+- ✅ **工具调用** — AI 可以调用 12 个内置工具，覆盖文件、命令、联网、界面、身份
+- ✅ **权限审批** — 危险操作弹窗确认，三档决定：拒绝 / 本次允许 / 始终允许
+- ✅ **4 种权限模式** — `ask` / `auto` / `work` / `agent`
+- ✅ **右侧预览面板** — AI 生成的 HTML 直接渲染，可拖拽调宽
+- ✅ **会话持久化** — 保存在 `~/.helix/sessions/`，重启不丢
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 - ✅ **刷新恢复** — 刷新页面后，未完成的任务自动恢复
 - ✅ **附件读取** — 上传文本文件，内容自动拼进消息
 - ✅ **审计与限流** — 所有工具调用留档，防止 AI 疯狂请求
@@ -203,6 +243,7 @@ cd helix-ai
 node bin/helix.js
 ```
 
+<<<<<<< HEAD
 ### 方式四：CLI 模式（v0.6.0 新增）
 
 不想开浏览器？直接在终端里聊：
@@ -220,11 +261,17 @@ node run.mjs
 
 Termux 用户尤其推荐：不用开浏览器，内存压力小，纯终端体验。
 
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 ### 系统要求
 
 - **Node.js 20 或更高**
 - 支持 Windows / macOS / Linux / Termux（Android）
+<<<<<<< HEAD
 - 任意现代浏览器（Chrome / Edge / Firefox / Safari）——CLI 模式不需要浏览器
+=======
+- 任意现代浏览器（Chrome / Edge / Firefox / Safari）
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ### 检查 Node 版本
 
@@ -252,6 +299,7 @@ npx helix-ai-cn
 
 然后就可以开始对话了。
 
+<<<<<<< HEAD
 ### 🆕 终端党快速通道（CLI）
 
 不想开浏览器？两条命令，直接在终端里聊：
@@ -273,11 +321,14 @@ node chat.mjs
 
 纯文本流式输出，工具调用可见，审批内联，支持跨会话记忆。Termux、SSH、无图形界面环境首选。
 
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 ---
 
 ## 首次使用
 
 1. 点右上角 **⚙️ 设置**
+<<<<<<< HEAD
 2. 在「模型」标签页添加你的第一个 **Profile**：
    - **名称** — 给这个配置起个名字，比如 `DeepSeek`
    - **API Key** — 你的模型服务商密钥
@@ -290,6 +341,17 @@ node chat.mjs
 
 想加第二个模型？点「添加配置」，填 Kimi 或 OpenAI，保存。顶部菜单一键切换。
 
+=======
+2. 填写：
+   - **API Key** — 你的模型服务商密钥
+   - **Base URL** — 兼容 OpenAI 协议的接口地址
+   - **模型名称** — 例如 `deepseek-chat`、`gpt-4o-mini`、`qwen-max`
+   - **工作目录** — AI 能操作的根目录
+3. 保存
+
+然后就可以在输入框里说话了。
+
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 ### 试试这几句
 
 - 「列出当前目录下的文件结构」
@@ -298,8 +360,11 @@ node chat.mjs
 - 「在预览面板渲染一个呼吸的渐变球」
 - 「搜一下 Vite 当前最新的稳定版本号」
 - 「你运行在什么系统上？」
+<<<<<<< HEAD
 - 「跑一下 npm test，把输出展示在终端里」
 - 「帮我规划一个 5 步的重构任务清单」
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ---
 
@@ -309,28 +374,45 @@ node chat.mjs
 
 左边是 logo、连接状态。右边依次是：
 
+<<<<<<< HEAD
 - **模型选择器** — 🆕 显示当前 Profile 名称，点开下拉菜单，列出所有已配置的模型，**一键热切换**。切换后当前对话立刻使用新模型，无需重启，无需刷新。
+=======
+- **模型名** — 点一下打开设置
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 - **权限模式** — 点一下循环切换
 - **余额** — 点一下刷新
 - **查找 / 命令面板 / 预览 / 主题 / 设置** — 五个图标按钮
 
 ### 左侧边栏
 
+<<<<<<< HEAD
 - **新建对话** — 开一个新会话（自动生成 UUID）
 - **筛选框** — 按标题搜索会话
 - **会话列表** — 按时间分组（今天 / 昨天 / 最近七天 / 更早）。🆕 开启「AI 自动标题」后，第一轮对话结束会自动显示 4-8 字主题，不再是一长串用户消息。
+=======
+- **新建对话** — 开一个新会话
+- **筛选框** — 按标题搜索会话
+- **会话列表** — 按时间分组（今天 / 昨天 / 最近七天 / 更早）
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 - **导出 / 导入 / 清空** — 三个底部按钮
 
 ### 中间对话区
 
+<<<<<<< HEAD
 - **消息流** — 用户消息、AI 回答、思考过程、工具卡片、🆕 任务卡片、🆕 终端卡片
+=======
+- **消息流** — 用户消息、AI 回答、思考过程、工具卡片
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 - **输入框** — 支持多行，Enter 发送，Shift+Enter 换行
 - **附件按钮** — 上传文本文件（会读取内容）
 - **语音输入** — 用浏览器语音识别
 - **发送 / 停止** — 一个按钮切换
 
+<<<<<<< HEAD
 🆕 **流式体验修复**：滚动条不再被强制拽回底部，卡片折叠不再弹回，页面不再疯狂闪烁。长回答读起来终于不打架了。
 
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 ### 右侧预览面板
 
 - **自动打开** — 当 AI 调用 `render_preview` 时
@@ -340,6 +422,7 @@ node chat.mjs
 
 ### 设置抽屉
 
+<<<<<<< HEAD
 七个标签页（🆕 新增「模型配置」）：
 
 1. **通用** — 工作目录、界面语言、正文字号、🆕 AI 自动标题开关、行为开关
@@ -349,6 +432,16 @@ node chat.mjs
 5. **快捷键** — 显示所有快捷键列表
 6. **终端皮肤** — 🆕 选择内嵌终端外观：macOS / Win11 / Win10 / Termux，可跟随系统自动匹配
 7. **关于** — 版本号、仓库地址、开源协议、重置全部数据
+=======
+六个标签页：
+
+1. **通用** — 工作目录、界面语言、正文字号、行为开关
+2. **模型** — API Key、Base URL、模型名、温度、最大 token、测试连接
+3. **权限** — 权限模式单选、已放行工具列表、命令超时
+4. **提示词** — 系统提示词编辑、5 个快速预设、导出、恢复默认
+5. **快捷键** — 显示所有快捷键列表
+6. **关于** — 版本号、仓库地址、开源协议、重置全部数据
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ### 命令面板
 
@@ -356,7 +449,10 @@ node chat.mjs
 
 - 新建对话
 - 打开设置
+<<<<<<< HEAD
 - 🆕 切换模型（列出所有 Profiles）
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 - 切换主题
 - 切换预览面板
 - 在当前对话中查找
@@ -366,7 +462,10 @@ node chat.mjs
 - 导出为 Markdown
 - 重新生成上一条
 - 切换到 ask / auto / work / agent 模式
+<<<<<<< HEAD
 - 🆕 切换终端皮肤
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 - 清空当前对话 / 清空全部会话
 
 ### 查找栏
@@ -375,6 +474,7 @@ node chat.mjs
 
 ---
 
+<<<<<<< HEAD
 ## 多模型配置（Profiles）
 
 > v0.6.0 核心卖点之一。告别“改 Key 重启”的原始时代。
@@ -562,6 +662,45 @@ node chat.mjs
 
 读文本文件。上限 100 KB。超过会截断，末尾加 `[truncated]`。
 
+=======
+## 内置工具
+
+| 工具 | 作用 | 需要审批 |
+|------|------|:--------:|
+| `list_dir` | 列出目录内容 | — |
+| `read_file` | 读取文件（上限 100 KB） | — |
+| `write_file` | 写入文件（创建或覆盖） | ✅ |
+| `edit_file` | 精确替换文件中的文本 | ✅ |
+| `delete_path` | 删除文件或目录 | ✅ |
+| `run_command` | 执行 shell 命令 | ✅ |
+| `system_info` | 查询运行环境 | — |
+| `web_search` | 用 Bing 搜索网页 | — |
+| `fetch_url` | 抓取网页并转为纯文本 | — |
+| `render_preview` | 在右侧面板渲染 HTML | — |
+| `ask_user` | 反过来问用户问题 | 永远弹窗 |
+| `whoami` | 查询自己的身份 | — |
+
+---
+
+## 工具详解
+
+### list_dir
+
+列一层目录，不递归。返回文件名、大小、是不是目录。目录在前，文件在后，同类按字母排序。
+
+```text
+目录：src
+  components/  (目录)
+  utils/       (目录)
+  index.js     (1.2 KB)
+  router.js    (3.4 KB)
+```
+
+### read_file
+
+读文本文件。上限 100 KB。超过会截断，末尾加 `[truncated]`。
+
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 ### write_file
 
 写文件。文件不存在就创建，已存在就覆盖。父目录不存在会自动建。
@@ -586,8 +725,11 @@ node chat.mjs
 
 ### run_command
 
+<<<<<<< HEAD
 > v0.6.0 最硬核的更新：**内嵌拟真终端**。
 
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 跑 shell 命令。命令和参数**分开传**：
 
 ```json
@@ -608,6 +750,7 @@ node chat.mjs
 
 **会触发审批。**
 
+<<<<<<< HEAD
 #### 🆕 内嵌拟真终端
 
 AI 执行 `run_command` 时，工具卡片里不再只是一段干巴巴的文本。你可以**展开一个真实的终端窗口**，实时看到命令输出流式渲染。
@@ -635,6 +778,8 @@ AI 执行 `run_command` 时，工具卡片里不再只是一段干巴巴的文�
 └────────────────────────────────────────────┘
 ```
 
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 ### system_info
 
 让 AI 知道运行环境：
@@ -645,7 +790,11 @@ AI 执行 `run_command` 时，工具卡片里不再只是一段干巴巴的文�
 - 工作目录
 - 示例命令
 
+<<<<<<< HEAD
 **为什么重要**：Termux 上要用 `ls`，Windows 上要用 `dir`。AI 知道自己在哪里，才能选对命令。v0.6.0 的终端皮肤也会根据这个信息自动匹配。
+=======
+**为什么重要**：Termux 上要用 `ls`，Windows 上要用 `dir`。AI 知道自己在哪里，才能选对命令。
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ### web_search
 
@@ -680,7 +829,10 @@ AI 执行 `run_command` 时，工具卡片里不再只是一段干巴巴的文�
 - 模型名
 - 服务商（DeepSeek / OpenAI / Kimi / 通义 等）
 - 调用地址
+<<<<<<< HEAD
 - 🆕 当前 Profile 名称
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 - 工作目录
 - 权限模式
 - 可用工具清单
@@ -688,6 +840,7 @@ AI 执行 `run_command` 时，工具卡片里不再只是一段干巴巴的文�
 
 **关键设计**：做成工具而不是写进系统提示词。因为用户可以改提示词，但工具清单走的是 API 的 `tools` 字段，用户改不掉。
 
+<<<<<<< HEAD
 ### update_tasks
 
 > v0.6.0 新增。AI 干长任务时的进度条。
@@ -709,6 +862,8 @@ AI 可以列出一个任务清单，并实时更新每一项的状态。前端�
 
 **为什么需要它**：长任务里，AI 说“我正在做 A、B、C”很容易让人迷失。任务卡片让进度可视化，你能一眼看到还剩几步。
 
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 ---
 
 ## 权限模式
@@ -722,7 +877,11 @@ AI 可以列出一个任务清单，并实时更新每一项的状态。前端�
 
 ### 什么算只读工具
 
+<<<<<<< HEAD
 `list_dir`、`read_file`、`web_search`、`fetch_url`、`whoami`、`system_info`、`update_tasks`
+=======
+`list_dir`、`read_file`、`web_search`、`fetch_url`、`whoami`、`system_info`
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ### 什么算写/执行工具
 
@@ -732,6 +891,7 @@ AI 可以列出一个任务清单，并实时更新每一项的状态。前端�
 
 - **`ask_user`** — 无论什么模式都弹窗
 - **`render_preview`** — 无论什么模式都不弹窗
+<<<<<<< HEAD
 - **`update_tasks`** — 无论什么模式都不弹窗
 
 ### CLI 下的权限
@@ -744,6 +904,8 @@ CLI 客户端里，审批变成终端内联提问：
 ```
 
 `y` 本次允许，`N` 拒绝，`a` 始终允许（本次运行内）。
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ---
 
@@ -770,10 +932,13 @@ AI 调用 `write_file` / `edit_file` / `delete_path` / `run_command` 时。
 
 等待超过 5 分钟 → 自动拒绝。
 
+<<<<<<< HEAD
 ### 🆕 CLI 下的审批
 
 CLI 客户端同样走 WebSocket 审批协议，只是渲染方式变成终端内联提问。`a` 选项对应 `allow_always`。
 
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 ---
 
 ## 安全与隐私
@@ -787,10 +952,13 @@ CLI 客户端同样走 WebSocket 审批协议，只是渲染方式变成终端�
 5. **配置文件权限 0600**。
 6. **前端不直接触碰 Key**。
 
+<<<<<<< HEAD
 ### 🆕 多模型下的 Key 安全
 
 每个 Profile 的 `apiKey` 独立存储，读取时统一脱敏。切换 Profile 时前端只发 `profileId`，后端从配置文件里取真实 Key，Key 永远不经过前端。
 
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 ### 关于上传
 
 Helix 本身不会上传任何东西。
@@ -806,13 +974,20 @@ Helix 能保证的是：除了这个必要的模型请求之外，它不会把�
 | 数据 | 存放位置 |
 |------|---------|
 | API Key、模型、工作目录、系统提示词 | `~/.helix/config.json`（权限 0600） |
+<<<<<<< HEAD
 | 聊天记录 | `~/.helix/sessions/<uuid>/`（🆕 UUID 隔离） |
+=======
+| 聊天记录 | `~/.helix/sessions/<会话名>/` |
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 | 界面偏好 | 浏览器 `localStorage` |
 | 工作区文件 | 你自己的硬盘，AI 直接读写，不复制、不上传 |
 | 预览内容 | 内存，通过 WebSocket 推给浏览器，不持久化 |
 | 模型余额 | 实时查询，不存储 |
+<<<<<<< HEAD
 | 🆕 终端输出 | 内存，通过 WebSocket 推给前端，不持久化 |
 | 🆕 任务清单 | 随会话保存在 `history.json` 内 |
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ---
 
@@ -835,6 +1010,7 @@ Helix 能保证的是：除了这个必要的模型请求之外，它不会把�
 - 无 CDN 依赖
 - 只使用浏览器自带 API（WebSocket、fetch、DOM）
 
+<<<<<<< HEAD
 ### 🆕 CLI
 
 - 纯 Node.js 脚本（`run.mjs` / `chat.mjs`）
@@ -842,11 +1018,17 @@ Helix 能保证的是：除了这个必要的模型请求之外，它不会把�
 - 使用 Node 内置 `readline` + `ws`
 - ANSI 颜色手动拼转义序列
 
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 ### 存储
 
 - 纯本地，不接数据库，不接 Supabase
 - 配置：`~/.helix/config.json`
+<<<<<<< HEAD
 - 会话：`~/.helix/sessions/<uuid>/meta.json` + `history.json` + `tool_logs.jsonl`
+=======
+- 会话：`~/.helix/sessions/<name>/conversation.json` + `tools.jsonl`
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ---
 
@@ -866,18 +1048,30 @@ helix-ai/
 │   ├── index.js                 # HTTP + WebSocket 服务
 │   ├── llm.js                   # 调用模型，流式返回
 │   ├── config.js                # 读写配置，Key 脱敏
+<<<<<<< HEAD
 │   ├── profiles.js              # 🆕 多模型配置管理
 │   ├── approval.js              # 权限审批调度
 │   ├── balance.js               # 余额查询
 │   ├── session.js               # 会话持久化（UUID）
+=======
+│   ├── approval.js              # 权限审批调度
+│   ├── balance.js               # 余额查询
+│   ├── session.js               # 会话持久化
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 │   ├── tasks.js                 # 流式任务快照
 │   └── tool/                    # ⚠️ 单数 tool
 │       ├── index.js             # 工具注册表
 │       ├── file.js              # 文件工具
+<<<<<<< HEAD
 │       ├── shell.js             # 命令工具 + 终端流
 │       ├── web.js               # 联网工具
 │       ├── ui.js                # 界面工具（预览 / 提问）
 │       ├── tasks.js             # 🆕 任务块工具
+=======
+│       ├── shell.js             # 命令工具
+│       ├── web.js               # 联网工具
+│       ├── ui.js                # 界面工具
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 │       ├── whoami.js            # 身份工具
 │       └── audit.js             # 审计 + 限流
 ├── public/
@@ -885,7 +1079,10 @@ helix-ai/
 │   ├── script.js                # 前端主逻辑
 │   ├── style.css                # 样式
 │   ├── markdown.js              # Markdown 渲染器
+<<<<<<< HEAD
 │   ├── terminal.js              # 🆕 内嵌终端渲染器
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 │   └── favicon.svg              # 图标
 └── docs/
     ├── HANDOFF.md               # 交接文档
@@ -899,6 +1096,7 @@ helix-ai/
 | 文件 | 职责 |
 |------|------|
 | `bin/helix.js` | 找空闲端口、生成 token、启动后端、打开浏览器 |
+<<<<<<< HEAD
 | `run.mjs` | 🆕 CLI 启动器：检查/拉起后端、连接 WebSocket |
 | `chat.mjs` | 🆕 CLI 聊天客户端：交互式输入、流式渲染、内联审批 |
 | `server/index.js` | Express + WebSocket 服务、托管 public/ |
@@ -915,13 +1113,30 @@ helix-ai/
 | `server/tool/web.js` | 搜索和抓取工具 |
 | `server/tool/ui.js` | 预览和提问工具 |
 | `server/tool/tasks.js` | 🆕 任务块工具 |
+=======
+| `server/index.js` | Express + WebSocket 服务、托管 public/ |
+| `server/config.js` | 读写配置、Key 脱敏、权限 0600 |
+| `server/llm.js` | 调用模型、流式返回、工具调用循环 |
+| `server/approval.js` | 审批请求调度（前后端往返） |
+| `server/balance.js` | 查询模型余额 |
+| `server/session.js` | 会话持久化 |
+| `server/tasks.js` | 流式任务快照 |
+| `server/tool/index.js` | 工具注册表 + 分发 |
+| `server/tool/file.js` | 文件操作工具 |
+| `server/tool/shell.js` | 命令执行工具 |
+| `server/tool/web.js` | 搜索和抓取工具 |
+| `server/tool/ui.js` | 预览和提问工具 |
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 | `server/tool/whoami.js` | 身份查询工具 |
 | `server/tool/audit.js` | 工具调用审计 + 限流 |
 | `public/index.html` | 前端 HTML |
 | `public/script.js` | 前端主逻辑 |
 | `public/style.css` | 前端样式 |
 | `public/markdown.js` | Markdown 渲染器 |
+<<<<<<< HEAD
 | `public/terminal.js` | 🆕 内嵌终端渲染器（4 套皮肤） |
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ---
 
@@ -943,12 +1158,20 @@ token 错误时立即关闭，close code = 4001。
 { "type": "abort" }
 ```
 
+<<<<<<< HEAD
 ### 服务端 → 客户端（v0.6.0 共 13 种）
+=======
+### 服务端 → 客户端（10 种）
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 **1. ready** — 连接成功
 
 ```json
+<<<<<<< HEAD
 { "type": "ready", "model": "deepseek-chat", "workspace": "/path", "profile": "DeepSeek" }
+=======
+{ "type": "ready", "model": "deepseek-flash", "workspace": "/path" }
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 ```
 
 **2. assistant_delta** — 正文流式增量
@@ -975,6 +1198,7 @@ token 错误时立即关闭，close code = 4001。
 { "type": "tool_end", "callId": "call_x", "ok": true, "result": "..." }
 ```
 
+<<<<<<< HEAD
 **6. 🆕 terminal_chunk** — 终端流式输出（`run_command` 专用）
 
 ```json
@@ -996,23 +1220,35 @@ token 错误时立即关闭，close code = 4001。
 ```
 
 **8. approval_request** — 请求审批
+=======
+**6. approval_request** — 请求审批
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ```json
 { "type": "approval_request", "requestId": "req_x", "kind": "permission|question", "title": "...", "detail": "...", "tool": "run_command" }
 ```
 
+<<<<<<< HEAD
 **9. preview** — 推预览内容
+=======
+**7. preview** — 推预览内容
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ```json
 { "type": "preview", "html": "<!DOCTYPE html>..." }
 ```
 
+<<<<<<< HEAD
 **10. balance** — 余额信息
+=======
+**8. balance** — 余额信息
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ```json
 { "type": "balance", "supported": true, "balance": {...} }
 ```
 
+<<<<<<< HEAD
 **11. 🆕 title_update** — AI 自动标题更新
 
 ```json
@@ -1020,12 +1256,19 @@ token 错误时立即关闭，close code = 4001。
 ```
 
 **12. done** — 本次回答结束
+=======
+**9. done** — 本次回答结束
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ```json
 { "type": "done", "reason": "complete|aborted|error" }
 ```
 
+<<<<<<< HEAD
 **13. error** — 错误
+=======
+**10. error** — 错误
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ```json
 { "type": "error", "message": "...", "code": "INVALID_API_KEY" }
@@ -1045,6 +1288,7 @@ token 错误时立即关闭，close code = 4001。
 | GET | `/api/audit` | 最近的工具调用记录 |
 | POST | `/api/audit/reset` | 清空审计 |
 | GET | `/api/session/list` | 列出所有会话 |
+<<<<<<< HEAD
 | GET | `/api/session/load/:uuid` | 读取某个会话（🆕 UUID） |
 | POST | `/api/session/delete/:uuid` | 删除某个会话（🆕 UUID） |
 | GET | `/api/task/:id` | 查询流式任务快照 |
@@ -1054,6 +1298,12 @@ token 错误时立即关闭，close code = 4001。
 | 🆕 DELETE | `/api/profiles/:id` | 删除 Profile |
 | 🆕 POST | `/api/profiles/switch` | 切换当前 Profile |
 | 🆕 GET | `/api/profiles/:id/test` | 测试 Profile 连接 |
+=======
+| GET | `/api/session/load/:name` | 读取某个会话 |
+| POST | `/api/session/delete/:name` | 删除某个会话 |
+| GET | `/api/task/:id` | 查询流式任务快照 |
+| POST | `/api/task/:id/abort` | 中止流式任务 |
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ---
 
@@ -1063,6 +1313,7 @@ token 错误时立即关闭，close code = 4001。
 
 ```json
 {
+<<<<<<< HEAD
   "profiles": [
     {
       "id": "deepseek-1",
@@ -1080,41 +1331,63 @@ token 错误时立即关闭，close code = 4001。
     }
   ],
   "activeProfileId": "deepseek-1",
+=======
+  "apiKey": "sk-...",
+  "baseUrl": "https://api.deepseek.com/v1",
+  "model": "deepseek-chat",
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
   "workspace": "/home/user/project",
   "systemPrompt": "你是一个本地 AI 助手...",
   "permissionMode": "auto",
   "temperature": 0.7,
   "maxTokens": 4096,
+<<<<<<< HEAD
   "cmdTimeout": 30,
   "autoTitle": true,
   "terminalSkin": "auto"
+=======
+  "cmdTimeout": 30
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 }
 ```
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
+<<<<<<< HEAD
 | `profiles` | array | `[]` | 🆕 多模型配置列表 |
 | `activeProfileId` | string | `""` | 🆕 当前激活的 Profile ID |
+=======
+| `apiKey` | string | `""` | API Key，只写不读 |
+| `baseUrl` | string | `https://api.deepseek.com/v1` | 模型服务地址 |
+| `model` | string | `deepseek-chat` | 模型名称 |
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 | `workspace` | string | `process.cwd()` | AI 可操作的工作目录 |
 | `systemPrompt` | string | （见下） | 系统提示词 |
 | `permissionMode` | string | `auto` | 权限模式 |
 | `temperature` | number | `0.7` | 模型温度 |
 | `maxTokens` | number | `4096` | 最大输出 token |
 | `cmdTimeout` | number | `30` | 命令超时秒数 |
+<<<<<<< HEAD
 | `autoTitle` | boolean | `true` | 🆕 AI 自动生成会话标题 |
 | `terminalSkin` | string | `auto` | 🆕 终端皮肤：`auto` / `macos` / `win11` / `win10` / `termux` |
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 **关键规则**：
 
 - 保存时**空字符串不覆盖已有值**
 - 写入后 `chmod 0600`
 - **API Key 只进不出**
+<<<<<<< HEAD
 - 🆕 Profile 的 `apiKey` 同样只进不出
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ---
 
 ## 会话存储
 
+<<<<<<< HEAD
 v0.6.0 起，每个会话独立 UUID 文件夹，彻底解决同名冲突：
 
 ```text
@@ -1148,6 +1421,18 @@ v0.6.0 起，每个会话独立 UUID 文件夹，彻底解决同名冲突：
 - 导入 / 导出按 UUID 精确操作
 - CLI 和 WebUI 共享同一套会话（`/load <uuid>`）
 - 会话文件结构清晰，方便脚本处理
+=======
+每次 AI 回答完，会话自动保存到：
+
+```text
+~/.helix/sessions/
+  └── <会话名>/
+      ├── conversation.json    # 完整对话
+      └── tools.jsonl          # 每行一条工具调用日志
+```
+
+会话名取第一条用户消息的前 20 个字符。同名会覆盖。
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ---
 
@@ -1163,12 +1448,15 @@ v0.6.0 起，每个会话独立 UUID 文件夹，彻底解决同名冲突：
 
 五个预设：默认 / 极简回答 / 教学讲解 / 代码审查 / 架构设计。
 
+<<<<<<< HEAD
 🆕 v0.6.0 的系统提示词里会额外注入：
 
 - 当前 Profile 名称和模型名
 - 终端皮肤偏好（让 AI 知道输出环境）
 - `update_tasks` 的使用提示（长任务建议列清单）
 
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 ---
 
 ## 快捷键
@@ -1184,8 +1472,11 @@ v0.6.0 起，每个会话独立 UUID 文件夹，彻底解决同名冲突：
 | 切换深浅主题 | `Ctrl + J` |
 | 聚焦输入框 | `Ctrl + L` |
 | 清空当前对话 | `Ctrl + Shift + K` |
+<<<<<<< HEAD
 | 🆕 切换模型（Profiles） | `Ctrl + Shift + M` |
 | 🆕 切换终端皮肤 | `Ctrl + Shift + T` |
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 | 关闭弹窗 / 面板 | `Esc` |
 
 > 注：如果你的 Markdown 渲染器对表格里的反斜杠处理异常，可把 `Ctrl + \` 改为 `Ctrl + 反斜杠` 或 `Ctrl + Backslash`。
@@ -1210,6 +1501,7 @@ v0.6.0 起，每个会话独立 UUID 文件夹，彻底解决同名冲突：
 - [x] 附件读取文本内容
 - [x] 工具调用审计 + 限流
 
+<<<<<<< HEAD
 ### P1 — 第二阶段 ✅ 已完成（v0.6.0）
 
 - [x] 多模型配置（Profiles）热切换
@@ -1236,6 +1528,28 @@ v0.6.0 起，每个会话独立 UUID 文件夹，彻底解决同名冲突：
 - [ ] HTTPS 隧道
 - [ ] 实时预览双向编辑
 - [ ] 插件系统
+=======
+### P1 — 第二阶段（进行中）
+
+- [ ] 前端启动时主动拉配置
+- [ ] 余额自动刷新
+- [ ] 修 3 个流式 bug（拽回底部 / 卡片弹回 / 闪烁）
+- [ ] 终端视图（实时看 AI 跑命令）
+- [ ] 终端皮肤系统（Win10 / Win11 / Unix / Termux）
+- [ ] workspace 可配置
+- [ ] 审批优化（批量 / 范围授权 / 会话白名单）
+- [ ] 前后端会话打通
+- [ ] Markdown 渲染器升级
+
+### P2 — 第三阶段
+
+- 云 Agent 部署
+- AI 浏览器集成
+- 多服务商切换 UI
+- HTTPS 隧道
+- 实时预览双向编辑
+- 插件系统
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ### 明确不做
 
@@ -1254,6 +1568,7 @@ v0.6.0 起，每个会话独立 UUID 文件夹，彻底解决同名冲突：
 
 ## 性能与体积
 
+<<<<<<< HEAD
 - **npm 发布包**：122.7 kB
 - **解压后**：440.3 kB
 - **加 node_modules**：约 3.2 MB
@@ -1262,6 +1577,12 @@ v0.6.0 起，每个会话独立 UUID 文件夹，彻底解决同名冲突：
 - **内嵌终端额外依赖**：0 个（手写 ANSI 解析）
 
 > v0.6.0 新增了这么多功能，发布包只涨了约 35.7 kB。没有引入任何新的运行时依赖。
+=======
+- **npm 发布包**：87 KB
+- **解压后**：312 KB
+- **加 node_modules**：约 3 MB
+- **依赖数量**：2 个（express、ws）
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ---
 
@@ -1285,6 +1606,7 @@ A：任何兼容 OpenAI Chat Completions 协议的接口：
 - 通义千问、智谱、Kimi 等
 - 各类兼容中转服务
 
+<<<<<<< HEAD
 🆕 而且可以同时配置多个，热切换。
 
 **Q：多模型配置切换会丢历史吗？**
@@ -1299,12 +1621,15 @@ A：不需要。`chat.mjs` 纯终端运行，自动拉起后端并连接 WebSock
 
 A：它渲染的是 `run_command` 的实时输出流，支持 ANSI 颜色和 `\r` 覆盖。它不是完整的 PTY，不能交互式输入（比如 `vim`），但看命令输出、进度条、彩色日志完全够用。
 
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 **Q：为什么叫 Helix？**
 
 A：Helix 是螺旋。对话和工具在 Agent 循环里反复缠绕，像 DNA 双螺旋。
 
 **Q：为什么只有两个依赖？**
 
+<<<<<<< HEAD
 A：依赖越多，攻击面越大、安装越慢、长期维护越难。v0.6.0 加了这么多功能，依然只有 express 和 ws。
 
 **Q：能在手机上跑吗？**
@@ -1322,6 +1647,17 @@ A：会调用一次低 token 的模型请求，成本极低。可以在设置里
 **Q：UUID 会话文件夹能手动改吗？**
 
 A：可以。`meta.json` 里的 `title` 随便改，侧边栏会读取。但不要改 `id`，那是索引键。
+=======
+A：依赖越多，攻击面越大、安装越慢、长期维护越难。
+
+**Q：能在手机上跑吗？**
+
+A：可以，通过 Termux。但手机上体验不如电脑。
+
+**Q：Windows 上能跑吗？**
+
+A：可以。Helix 只依赖 Node.js 运行时，不依赖任何平台特定二进制。
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ---
 
@@ -1336,7 +1672,10 @@ A：可以。`meta.json` 里的 `title` 随便改，侧边栏会读取。但不�
 - 保持简洁
 - 不引入不必要的依赖
 - 注释解释“为什么”（中文），而不是“是什么”（英文）
+<<<<<<< HEAD
 - 🆕 终端渲染相关的代码请附带 ANSI 测试用例
+=======
+>>>>>>> 72300cfc6f1e1f2357678a631f26aafe18f3888e
 
 ---
 
@@ -1350,8 +1689,13 @@ MIT © [hzx7891](https://github.com/hzx7891)
 
 🧬 **Helix** · 本地优先的 AI Agent 工作台
 
+<<<<<<< HEAD
 **v0.6.0** · 多模型 · CLI · 拟真终端 · UUID 会话
 
+[GitHub](https://github.com/hzx7891/helix-ai) · [npm](https://www.npmjs.com/package/helix-ai-cn) · [Issues](https://github.com/hzx7891/helix-ai/issues)
+
+</div>
+=======
 [GitHub](https://github.com/hzx7891/helix-ai) · [npm](https://www.npmjs.com/package/helix-ai-cn) · [Issues](https://github.com/hzx7891/helix-ai/issues)
 
 </div>
