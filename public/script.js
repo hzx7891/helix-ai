@@ -9,7 +9,10 @@
 })();
 
 /* ============================================================
-   Helix · 前端主逻辑 v0.4
+   Helix · 前端主逻辑 v0.5
+   - 终端改为内嵌于 run_command 工具卡片
+   - 四套拟真皮肤：win10 / win11 / macos / termux
+   - ANSI + \r 覆盖式渲染
    ============================================================ */
 (function(){
 'use strict';
@@ -71,58 +74,23 @@ const SHORTCUTS = [
 
 /* ------------------------------------------------------------
    工具图标映射表
-   ------------------------------------------------------------
-   根据工具名称自动匹配不同的 SVG 图标，不再全部显示扳手。
-   匹配规则：先找完全匹配，再找包含匹配（比如 web_search_v2 也能匹配到 web_search）。
    ------------------------------------------------------------ */
 const TOOL_ICON_MAP = {
-  // 联网 / 搜索
-  web_search: 'i-globe',
-  search: 'i-globe',
-  browse: 'i-globe',
-  google: 'i-globe',
-  baidu: 'i-globe',
-  fetch_url: 'i-link',
-  curl: 'i-link',
-  wget: 'i-link',
-  http_request: 'i-link',
-
-  // 终端 / 命令
-  run_command: 'i-terminal',
-  shell: 'i-terminal',
-  exec: 'i-terminal',
-  terminal: 'i-terminal',
-  bash: 'i-terminal',
-  powershell: 'i-terminal',
-
-  // 读取 / 查看
-  read_file: 'i-eye',
-  cat: 'i-eye',
-  view: 'i-eye',
-  open_file: 'i-eye',
-  list_dir: 'i-folder',
-  ls: 'i-folder',
-  dir: 'i-folder',
-  find_files: 'i-folder',
-
-  // 写入 / 编辑
-  write_file: 'i-edit',
-  edit_file: 'i-edit',
-  create_file: 'i-edit',
-  append_file: 'i-edit',
-
-  // 其他
-  spawn_agent: 'i-bot',
-  think: 'i-chip',
-  memory: 'i-book',
+  web_search: 'i-globe', search: 'i-globe', browse: 'i-globe',
+  google: 'i-globe', baidu: 'i-globe',
+  fetch_url: 'i-link', curl: 'i-link', wget: 'i-link', http_request: 'i-link',
+  run_command: 'i-terminal', shell: 'i-terminal', exec: 'i-terminal',
+  terminal: 'i-terminal', bash: 'i-terminal', powershell: 'i-terminal',
+  read_file: 'i-eye', cat: 'i-eye', view: 'i-eye', open_file: 'i-eye',
+  list_dir: 'i-folder', ls: 'i-folder', dir: 'i-folder', find_files: 'i-folder',
+  write_file: 'i-edit', edit_file: 'i-edit', create_file: 'i-edit', append_file: 'i-edit',
+  spawn_agent: 'i-bot', think: 'i-chip', memory: 'i-book',
 };
 
 function getToolIcon(name){
   if (!name) return 'i-wrench';
   const l = String(name).toLowerCase();
-  // 1. 完全匹配
   if (TOOL_ICON_MAP[l]) return TOOL_ICON_MAP[l];
-  // 2. 包含匹配（按 key 长度倒序，优先匹配更长的关键词）
   const keys = Object.keys(TOOL_ICON_MAP).sort((a, b) => b.length - a.length);
   for (const key of keys){
     if (l.indexOf(key) !== -1) return TOOL_ICON_MAP[key];
@@ -139,6 +107,19 @@ function uid(prefix){
   return (prefix || 'id') + '_' +
     Math.random().toString(36).slice(2, 9) +
     Date.now().toString(36).slice(-5);
+}
+
+function uuid(){
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'){
+      return crypto.randomUUID();
+    }
+  } catch(e){}
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c){
+    var r = Math.random() * 16 | 0;
+    var v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
 }
 
 function esc(s){
@@ -210,10 +191,7 @@ function debounce(fn, wait){
    2. Toast
    ------------------------------------------------------------ */
 const TOAST_ICON = {
-  success: 'i-check',
-  error: 'i-alert',
-  warn: 'i-alert',
-  info: 'i-info',
+  success: 'i-check', error: 'i-alert', warn: 'i-alert', info: 'i-info',
 };
 
 function toast(message, type, duration){
@@ -257,6 +235,10 @@ const state = {
     temperature: 0.7,
     maxTokens: 4096,
     cmdTimeout: 30,
+    useAiTitle: false,
+    activeProfileId: '',
+    profiles: [],
+    terminalSkin: 'skin-macos',
   },
 
   ui: {
@@ -275,6 +257,8 @@ const state = {
   cmdk: { items: [], index: 0 },
   nodes: new Map(),
 };
+
+let editingProfileId = null;
 
 /* ------------------------------------------------------------
    4. 元素引用
@@ -631,13 +615,32 @@ function saveStore(){
   }
 }
 
+function ensureCurrentSession(){
+  if (state.currentId){
+    const exists = state.sessions.some(x => x.id === state.currentId);
+    if (exists) return state.currentId;
+  }
+  const s = {
+    id: uuid(),
+    title: '新对话',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    messages: [],
+  };
+  state.sessions.unshift(s);
+  state.currentId = s.id;
+  saveStore();
+  renderSessionList();
+  return s.id;
+}
+
 function persistSession(){
   if (!state.messages.length) return;
 
   let s = state.sessions.find(x => x.id === state.currentId);
   if (!s){
     s = {
-      id: state.currentId || uid('sess'),
+      id: state.currentId || uuid(),
       title: '新对话',
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -658,8 +661,10 @@ function persistSession(){
   }));
   s.updatedAt = Date.now();
 
-  const firstUser = state.messages.find(m => m.role === 'user');
-  if (firstUser) s.title = firstUser.text.replace(/\s+/g, ' ').trim().slice(0, 40) || '新对话';
+  if (!s.aiTitleGenerated){
+    const firstUser = state.messages.find(m => m.role === 'user');
+    if (firstUser) s.title = firstUser.text.replace(/\s+/g, ' ').trim().slice(0, 40) || '新对话';
+  }
 
   saveStore();
   renderSessionList();
@@ -733,6 +738,19 @@ function renderSessionList(){
   });
 }
 
+function updateSessionTitle(id, newTitle){
+  if (!id || !newTitle) return;
+  const s = state.sessions.find(x => x.id === id);
+  if (!s) return;
+
+  s.title = String(newTitle).trim() || s.title;
+  s.updatedAt = Date.now();
+  s.aiTitleGenerated = true;
+
+  saveStore();
+  renderSessionList();
+}
+
 function switchSession(id){
   if (id === state.currentId) return;
   persistSession();
@@ -768,7 +786,7 @@ function newSession(silent){
   persistSession();
 
   const s = {
-    id: uid('sess'),
+    id: uuid(),
     title: '新对话',
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -866,6 +884,26 @@ function paintMessage(msg){
   if (!node) return;
   const body = node.querySelector('.msg-body');
 
+  const openTools = new Set();
+  const openTasks = new Set();
+  const openReasoning = new Set();
+
+  body.querySelectorAll('.tool-card').forEach(c => {
+    if (c.dataset.call && !c.classList.contains('collapsed')){
+      openTools.add(c.dataset.call);
+    }
+  });
+  body.querySelectorAll('.task-block').forEach(c => {
+    if (c.dataset.call && !c.classList.contains('collapsed')){
+      openTasks.add(c.dataset.call);
+    }
+  });
+  body.querySelectorAll('.reasoning').forEach((r, i) => {
+    if (!r.classList.contains('collapsed')){
+      openReasoning.add(i);
+    }
+  });
+
   let html = '';
 
   if (msg.reasoning && msg.reasoning.trim()){
@@ -881,7 +919,23 @@ function paintMessage(msg){
   }
 
   if (msg.tools && msg.tools.length){
-    msg.tools.forEach(t => { html += renderToolCard(t); });
+    var lastTaskIdx = -1;
+    for (var ti = 0; ti < msg.tools.length; ti++){
+      if (msg.tools[ti] && msg.tools[ti].name === 'update_tasks'){
+        lastTaskIdx = ti;
+      }
+    }
+    for (var tj = 0; tj < msg.tools.length; tj++){
+      var toolItem = msg.tools[tj];
+      if (!toolItem) continue;
+      if (toolItem.name === 'update_tasks'){
+        if (tj === lastTaskIdx){
+          html += renderTaskBlock(toolItem);
+        }
+      } else {
+        html += renderToolCard(toolItem);
+      }
+    }
   }
 
   if (msg.text && msg.text.length){
@@ -933,15 +987,38 @@ function paintMessage(msg){
 
   body.innerHTML = html;
 
+  if (openTools.size){
+    body.querySelectorAll('.tool-card').forEach(c => {
+      if (c.dataset.call && openTools.has(c.dataset.call)){
+        c.classList.remove('collapsed');
+      }
+    });
+  }
+  if (openTasks.size){
+    body.querySelectorAll('.task-block').forEach(c => {
+      if (c.dataset.call && openTasks.has(c.dataset.call)){
+        c.classList.remove('collapsed');
+      }
+    });
+  }
+  if (openReasoning.size){
+    body.querySelectorAll('.reasoning').forEach((r, i) => {
+      if (openReasoning.has(i)){
+        r.classList.remove('collapsed');
+      }
+    });
+  }
+
   bindMessageActions(node);
   bindCodeCopy(node);
   bindToolToggle(node);
+  bindTaskToggle(node);
   bindReasoningToggle(node);
   bindMsgFileToggles(node);
+  bindInlineTermToggles(node);
 }
 
-/* ==== 用户消息里的文件卡片（仅显示层，发送内容不变） ==== */
-
+/* ==== 用户消息文件卡片（保持原样） ==== */
 (function injectMsgFileStyle(){
   if (document.getElementById("helix-msg-files-style")) return;
   const s = document.createElement("style");
@@ -969,7 +1046,6 @@ function extractUserMessageParts(text){
   const files = [];
   let body = String(text || "");
 
-  /* 先抽 === 文件 xxx ===\n...\n=== 文件结束 === */
   body = body.replace(
     /=== 文件 ([^\n]+?) ===\n([\s\S]*?)\n=== 文件结束 ===/g,
     function(_, name, content){
@@ -978,7 +1054,6 @@ function extractUserMessageParts(text){
     }
   );
 
-  /* 再抽 [附件] name (size) */
   body = body.replace(
     /\[附件\] ([^\n]+?)\s*\(([^)]+)\)/g,
     function(_, name, size){
@@ -987,7 +1062,6 @@ function extractUserMessageParts(text){
     }
   );
 
-  /* 清理多余空行 */
   body = body.replace(/\n{3,}/g, "\n\n").trim();
 
   return { body: body, files: files };
@@ -1035,342 +1109,608 @@ function bindMsgFileToggles(root){
     });
   });
 }
-/* ==== 用户消息文件卡片结束 ==== */
 
+/* ==== 任务清单块（保持原样） ==== */
+(function injectTaskBlockStyle(){
+  if (document.getElementById("helix-task-block-style")) return;
+  var s = document.createElement("style");
+  s.id = "helix-task-block-style";
+  s.textContent = [
+    ".task-block{margin:10px 0;border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--canvas-default);overflow:hidden;box-shadow:var(--shadow-xs);transition:border-color .15s}",
+    ".task-block:hover{border-color:var(--border-default)}",
+    ".task-head{display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;user-select:none;font-size:12.5px;background:var(--canvas-subtle);border-bottom:1px solid var(--border-muted);transition:background .12s}",
+    ".task-head:hover{background:var(--canvas-default)}",
+    ".task-head .icon{width:13px;height:13px;color:var(--fg-muted);flex-shrink:0}",
+    ".task-title{font-weight:600;color:var(--fg-default);font-size:12.5px;white-space:nowrap}",
+    ".task-count{font-family:var(--font-mono);font-size:11px;color:var(--fg-subtle);white-space:nowrap}",
+    ".task-caret{margin-left:auto;transition:transform .15s;color:var(--fg-subtle)}",
+    ".task-block.collapsed .task-caret{transform:rotate(-90deg)}",
+    ".task-block.collapsed .task-body{display:none}",
+    ".task-badge{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;border:1px solid var(--border-default);font-family:var(--font-mono);font-size:11px;color:var(--fg-muted);flex-shrink:0;white-space:nowrap}",
+    ".task-badge.running{color:var(--accent-fg);border-color:var(--accent-emphasis)}",
+    ".task-badge.ok{color:var(--success-fg);border-color:var(--success-fg)}",
+    ".task-badge.fail{color:var(--danger-fg);border-color:var(--danger-fg)}",
+    ".task-body{display:flex;flex-direction:column;gap:4px;padding:9px 13px 11px}",
+    ".task-row{display:flex;align-items:flex-start;gap:8px;padding:2px 0;font-size:12.6px;line-height:1.6}",
+    ".task-sym{font-family:var(--font-mono);font-size:12px;font-weight:600;flex-shrink:0;min-width:28px}",
+    ".task-text{flex:1;min-width:0;word-break:break-word;color:var(--fg-default)}",
+    ".task-row.task-todo .task-sym{color:var(--fg-subtle)}",
+    ".task-row.task-todo .task-text{color:var(--fg-muted)}",
+    ".task-row.task-doing .task-sym{color:var(--accent-fg)}",
+    ".task-row.task-doing .task-text{color:var(--fg-default)}",
+    ".task-row.task-done .task-sym{color:var(--success-fg)}",
+    ".task-row.task-done .task-text{color:var(--fg-muted);text-decoration:line-through}",
+    ".task-row.task-failed .task-sym{color:var(--danger-fg)}",
+    ".task-row.task-failed .task-text{color:var(--danger-fg)}",
+    ".task-row.task-cancelled .task-sym{color:var(--fg-subtle)}",
+    ".task-row.task-cancelled .task-text{color:var(--fg-subtle);text-decoration:line-through}",
+    ".task-row.task-waiting .task-sym{color:var(--done-fg)}",
+    ".task-row.task-waiting .task-text{color:var(--fg-muted)}",
+    ".task-row.task-warning .task-sym{color:var(--attention-fg)}",
+    ".task-row.task-warning .task-text{color:var(--attention-fg)}"
+  ].join("");
+  document.head.appendChild(s);
+})();
+
+var TASK_STATUS_META = {
+  todo:      { sym: '[ ]', cls: 'todo' },
+  doing:     { sym: '[.]', cls: 'doing' },
+  done:      { sym: '[\u221a]', cls: 'done' },
+  failed:    { sym: '[X]', cls: 'failed' },
+  cancelled: { sym: '[-]', cls: 'cancelled' },
+  waiting:   { sym: '[?]', cls: 'waiting' },
+  warning:   { sym: '[!]', cls: 'warning' }
+};
+
+function parseTaskArgs(args){
+  var obj = args;
+  if (typeof obj === 'string'){
+    try { obj = JSON.parse(obj); } catch(e){ return []; }
+  }
+  if (!obj || typeof obj !== 'object') return [];
+
+  var list = obj.tasks;
+  if (!Array.isArray(list)) return [];
+
+  var out = [];
+  for (var i = 0; i < list.length; i++){
+    var item = list[i];
+    if (!item || typeof item !== 'object') continue;
+    var text = item.text == null ? '' : String(item.text);
+    var status = item.status == null ? 'todo' : String(item.status);
+    if (!TASK_STATUS_META[status]) status = 'todo';
+    out.push({ text: text, status: status });
+  }
+  return out;
+}
+
+function renderTaskBlock(tool){
+  var tasks = parseTaskArgs(tool.args);
+  var total = tasks.length;
+  var doneCount = 0;
+  for (var i = 0; i < total; i++){
+    if (tasks[i].status === 'done') doneCount++;
+  }
+
+  var running = tool.status === 'running';
+  var badge;
+  if (running){
+    badge = '<span class="task-badge running"><span class="spinner"></span>进行中</span>';
+  } else if (tool.status === 'fail'){
+    badge = '<span class="task-badge fail">' + doneCount + '/' + total + '</span>';
+  } else {
+    badge = '<span class="task-badge ok">' + doneCount + '/' + total + '</span>';
+  }
+
+  var rows = '';
+  for (var j = 0; j < total; j++){
+    var task = tasks[j];
+    var meta = TASK_STATUS_META[task.status] || TASK_STATUS_META.todo;
+    rows +=
+      '<div class="task-row task-' + meta.cls + '">' +
+        '<span class="task-sym">' + esc(meta.sym) + '</span>' +
+        '<span class="task-text">' + esc(task.text) + '</span>' +
+      '</div>';
+  }
+  if (!rows){
+    rows = '<div class="task-row task-todo">' +
+             '<span class="task-sym">[ ]</span>' +
+             '<span class="task-text">（暂无任务）</span>' +
+           '</div>';
+  }
+
+  return '<div class="task-block" data-call="' + esc(tool.callId || '') + '">' +
+    '<div class="task-head">' +
+      icon('i-check') +
+      '<span class="task-title">任务清单</span>' +
+      '<span class="task-count">' + total + ' 项</span>' +
+      icon('i-chev-down', 'task-caret') +
+      badge +
+    '</div>' +
+    '<div class="task-body">' + rows + '</div>' +
+  '</div>';
+}
+
+function bindTaskToggle(root){
+  var heads = root.querySelectorAll('.task-head');
+  for (var i = 0; i < heads.length; i++){
+    (function(head){
+      if (head.dataset.bound) return;
+      head.dataset.bound = '1';
+      head.addEventListener('click', function(){
+        var block = head.closest('.task-block');
+        if (block) block.classList.toggle('collapsed');
+      });
+    })(heads[i]);
+  }
+}
+
+/* ------------------------------------------------------------
+   9.5 内嵌终端：渲染与样式
+   ------------------------------------------------------------ */
+function injectInlineTermStyle(){
+  if (document.getElementById('helix-inline-term-style')) return;
+
+  var css = [
+    /* wrapper */
+    '.inline-terminal-wrapper{display:none;flex-direction:column;margin:10px 0 0;overflow:hidden;font-variant-ligatures:none;',
+    'transition:border-color .15s ease,box-shadow .15s ease}',
+    '.inline-terminal-wrapper.show{display:flex !important}',
+    '.tool-card.collapsed .inline-terminal-wrapper.show{display:flex !important}',
+
+    /* header 通用 */
+    '.inline-terminal-wrapper .term-header{display:flex;align-items:center;flex-shrink:0;user-select:none;position:relative;',
+    'font-size:11.5px;line-height:1;letter-spacing:.01em}',
+    '.inline-terminal-wrapper .term-header .term-title{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.72}',
+
+    /* body */
+    '.inline-terminal-wrapper .term-body{flex:1;min-height:80px;max-height:320px;overflow-y:auto;overflow-x:hidden;',
+    'padding:10px 12px 12px;white-space:pre-wrap;word-break:break-all;tab-size:4;font-size:12.5px;line-height:1.55;',
+    'font-variant-ligatures:none}',
+    '.inline-terminal-wrapper .term-body::-webkit-scrollbar{width:8px}',
+    '.inline-terminal-wrapper .term-body::-webkit-scrollbar-track{background:transparent}',
+    '.inline-terminal-wrapper .term-body::-webkit-scrollbar-thumb{border-radius:4px;background:rgba(255,255,255,.16)}',
+    '.inline-terminal-wrapper .term-body::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.28)}',
+    '.inline-terminal-wrapper .term-cmdline{white-space:pre-wrap;word-break:break-all;margin-bottom:2px}',
+    '.inline-terminal-wrapper .term-prompt{font-weight:600;user-select:none}',
+    '.inline-terminal-wrapper .term-output{white-space:pre-wrap;word-break:break-all}',
+    '.inline-terminal-wrapper .term-line{min-height:1.55em;white-space:pre-wrap}',
+    '.inline-terminal-wrapper .term-line-error{color:#ff5f57 !important}',
+
+    /* 工具头部按钮 */
+    '.btn-inline-term{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;padding:0;',
+    'border:1px solid transparent;border-radius:5px;background:transparent;color:var(--fg-subtle,#8b949e);cursor:pointer;',
+    'flex-shrink:0;transition:background .12s,color .12s,border-color .12s}',
+    '.btn-inline-term:hover{background:var(--canvas-subtle,#21262d);color:var(--fg-default,#e6edf3);border-color:var(--border-default,#30363d)}',
+    '.btn-inline-term.active{color:var(--accent-fg,#58a6ff);background:rgba(31,111,235,.12);border-color:rgba(31,111,235,.35)}',
+    '.btn-inline-term .icon{width:14px;height:14px}',
+
+    /* ANSI 颜色 */
+    '.ansi-bold{font-weight:700}',
+    '.ansi-dim{opacity:.6}',
+    '.ansi-italic{font-style:italic}',
+    '.ansi-underline{text-decoration:underline}',
+    '.ansi-fg-30{color:#6e7681}.ansi-fg-31{color:#ff7b72}.ansi-fg-32{color:#3fb950}.ansi-fg-33{color:#d29922}',
+    '.ansi-fg-34{color:#58a6ff}.ansi-fg-35{color:#bc8cff}.ansi-fg-36{color:#39c5cf}.ansi-fg-37{color:#b1bac4}',
+    '.ansi-fg-90{color:#8b949e}.ansi-fg-91{color:#ffa198}.ansi-fg-92{color:#56d364}.ansi-fg-93{color:#e3b341}',
+    '.ansi-fg-94{color:#79c0ff}.ansi-fg-95{color:#d2a8ff}.ansi-fg-96{color:#56d4dd}.ansi-fg-97{color:#f0f6fc}',
+    '.ansi-bg-40{background:#6e7681}.ansi-bg-41{background:#ff7b72}.ansi-bg-42{background:#3fb950}.ansi-bg-43{background:#d29922}',
+    '.ansi-bg-44{background:#58a6ff}.ansi-bg-45{background:#bc8cff}.ansi-bg-46{background:#39c5cf}.ansi-bg-47{background:#b1bac4}',
+
+    /* ============ macOS ============ */
+    '.inline-terminal-wrapper.skin-macos{background:#1e1e1e;border-radius:10px;',
+    'box-shadow:0 10px 28px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.06);',
+    'font-family:Menlo,Monaco,"SF Mono","Cascadia Mono",Consolas,monospace;color:#e6e6e6}',
+    '.inline-terminal-wrapper.skin-macos .term-header{height:32px;padding:0 12px;background:rgba(45,45,45,.82);',
+    '-webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);',
+    'border-bottom:1px solid rgba(0,0,0,.35)}',
+    '.inline-terminal-wrapper.skin-macos .traffic-lights{display:flex;align-items:center;gap:8px;flex-shrink:0}',
+    '.inline-terminal-wrapper.skin-macos .traffic-lights i{width:12px;height:12px;border-radius:50%;display:inline-block;',
+    'box-shadow:inset 0 1px 2px rgba(255,255,255,.42),inset 0 -1px 1px rgba(0,0,0,.12),0 .5px 1px rgba(0,0,0,.25);',
+    'transition:filter .12s}',
+    '.inline-terminal-wrapper.skin-macos .traffic-lights:hover i{filter:brightness(1.08)}',
+    '.inline-terminal-wrapper.skin-macos .tl-close{background:#ff5f57;border:.5px solid #e0443e}',
+    '.inline-terminal-wrapper.skin-macos .tl-min{background:#febc2e;border:.5px solid #dfa123}',
+    '.inline-terminal-wrapper.skin-macos .tl-max{background:#28c840;border:.5px solid #1aab29}',
+    '.inline-terminal-wrapper.skin-macos .term-prompt{color:#28c840}',
+    '.inline-terminal-wrapper.skin-macos .term-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16)}',
+
+    /* ============ Win11 ============ */
+    '.inline-terminal-wrapper.skin-win11{background:#0c0c0c;border-radius:8px;border:1px solid #333;',
+    'box-shadow:0 8px 24px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.04);',
+    'font-family:"Cascadia Mono","Cascadia Code",Consolas,"Microsoft YaHei UI",monospace;color:#cccccc}',
+    '.inline-terminal-wrapper.skin-win11 .term-header{height:36px;padding:6px 8px 0;background:#1f1f1f;',
+    'border-bottom:1px solid #2b2b2b;display:flex;align-items:flex-end}',
+    '.inline-terminal-wrapper.skin-win11 .term-tabs{display:flex;align-items:flex-end;gap:2px;flex:1;min-width:0}',
+    '.inline-terminal-wrapper.skin-win11 .term-tab{display:flex;align-items:center;gap:6px;height:30px;padding:0 10px;',
+    'border-radius:8px 8px 0 0;font-size:11.5px;color:#b9b9b9;white-space:nowrap;max-width:220px;flex-shrink:1;min-width:0;',
+    'position:relative;cursor:default}',
+    '.inline-terminal-wrapper.skin-win11 .term-tab.active{background:#0c0c0c;color:#e6e6e6}',
+    '.inline-terminal-wrapper.skin-win11 .term-tab.active::before{content:"";position:absolute;left:8px;right:8px;top:0;',
+    'height:2px;border-radius:0 0 2px 2px;background:#0078d4}',
+    '.inline-terminal-wrapper.skin-win11 .term-tab-ico{display:inline-flex;flex-shrink:0;color:#4cc2ff}',
+    '.inline-terminal-wrapper.skin-win11 .term-tab-ico .icon{width:13px;height:13px}',
+    '.inline-terminal-wrapper.skin-win11 .term-tab-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.inline-terminal-wrapper.skin-win11 .term-tab-x{opacity:.5;font-size:14px;line-height:1;flex-shrink:0;margin-left:2px}',
+    '.inline-terminal-wrapper.skin-win11 .term-tab-add{width:24px;height:24px;display:flex;align-items:center;justify-content:center;',
+    'border-radius:5px;color:#9a9a9a;font-size:16px;line-height:1;flex-shrink:0;margin-bottom:3px;cursor:default}',
+    '.inline-terminal-wrapper.skin-win11 .term-tab-add:hover{background:#2b2b2b;color:#ddd}',
+    '.inline-terminal-wrapper.skin-win11 .term-prompt{color:#ffffff;font-weight:400}',
+    '.inline-terminal-wrapper.skin-win11 .term-body{color:#cccccc}',
+    '.inline-terminal-wrapper.skin-win11 .term-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14)}',
+
+    /* ============ Win10 PowerShell ============ */
+    '.inline-terminal-wrapper.skin-win10{background:#012456;border-radius:4px;',
+    'box-shadow:0 8px 22px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.06);',
+    'font-family:Consolas,"Lucida Console","Courier New",monospace;color:#eeedf0}',
+    '.inline-terminal-wrapper.skin-win10 .term-header{height:26px;padding:0 10px;background:#0a1f4a;',
+    'border-bottom:1px solid #001a3d;font-size:11px;color:#b9c8e6;letter-spacing:.02em}',
+    '.inline-terminal-wrapper.skin-win10 .term-header .term-title{text-align:left;opacity:.8}',
+    '.inline-terminal-wrapper.skin-win10 .term-prompt{color:#eeedf0;font-weight:600}',
+    '.inline-terminal-wrapper.skin-win10 .term-output .term-line-error,',
+    '.inline-terminal-wrapper.skin-win10 .term-output .term-line-error span{color:#ff5f57 !important}',
+    '.inline-terminal-wrapper.skin-win10 .term-body::-webkit-scrollbar-thumb{background:#2a5a9c}',
+
+    /* ============ Termux ============ */
+    '.inline-terminal-wrapper.skin-termux{background:#000;border-radius:0;',
+    'box-shadow:0 6px 18px rgba(0,0,0,.6),inset 0 0 0 1px #0f2a0c;',
+    'font-family:"Termux","DejaVu Sans Mono","Liberation Mono",Consolas,monospace;color:#4af626}',
+    '.inline-terminal-wrapper.skin-termux .term-header{height:0;padding:0;overflow:hidden;border:none;background:transparent}',
+    '.inline-terminal-wrapper.skin-termux .term-title{display:none}',
+    '.inline-terminal-wrapper.skin-termux .term-prompt{color:#4af626;font-weight:600}',
+    '.inline-terminal-wrapper.skin-termux .term-body{color:#4af626}',
+    '.inline-terminal-wrapper.skin-termux .term-body::-webkit-scrollbar-thumb{background:rgba(74,246,38,.22)}',
+
+    /* 移动端 */
+    '@media (max-width:900px){',
+    '.inline-terminal-wrapper .term-body{max-height:260px;font-size:12px}',
+    '}'
+  ].join('');
+
+  var s = document.createElement('style');
+  s.id = 'helix-inline-term-style';
+  s.textContent = css;
+  document.head.appendChild(s);
+}
+
+/* ------------------------------------------------------------
+   9.6 内嵌终端：ANSI + \r 单元格渲染
+   ------------------------------------------------------------ */
+function removeStylePrefix(arr, prefix){
+  for (var i = arr.length - 1; i >= 0; i--){
+    if (arr[i].indexOf(prefix) === 0) arr.splice(i, 1);
+  }
+}
+
+function applySgrCodes(seq, style){
+  var codes = seq ? seq.split(';').filter(Boolean).map(Number) : [0];
+  if (!codes.length) codes = [0];
+
+  for (var i = 0; i < codes.length; i++){
+    var c = codes[i];
+    if (c === 0){ style.length = 0; }
+    else if (c === 1){ if (style.indexOf('ansi-bold') === -1) style.push('ansi-bold'); }
+    else if (c === 2){ if (style.indexOf('ansi-dim') === -1) style.push('ansi-dim'); }
+    else if (c === 3){ if (style.indexOf('ansi-italic') === -1) style.push('ansi-italic'); }
+    else if (c === 4){ if (style.indexOf('ansi-underline') === -1) style.push('ansi-underline'); }
+    else if (c >= 30 && c <= 37){
+      removeStylePrefix(style, 'ansi-fg');
+      style.push('ansi-fg-' + c);
+    } else if (c >= 90 && c <= 97){
+      removeStylePrefix(style, 'ansi-fg');
+      style.push('ansi-fg-' + c);
+    } else if (c >= 40 && c <= 47){
+      removeStylePrefix(style, 'ansi-bg');
+      style.push('ansi-bg-' + c);
+    } else if (c >= 100 && c <= 107){
+      removeStylePrefix(style, 'ansi-bg');
+      style.push('ansi-bg-' + c);
+    }
+  }
+}
+
+/* 核心：把原始流解析为行 × 单元格，\r 回到行首覆盖，\n 换行。 */
+function parseAnsiCells(raw){
+  var lines = [[]];
+  var col = 0;
+  var style = [];
+  var i = 0;
+  var n = raw.length;
+
+  while (i < n){
+    var c = raw[i];
+
+    if (c === '\x1b' && raw[i + 1] === '['){
+      var j = i + 2;
+      while (j < n && raw[j] !== 'm' && raw[j] !== 'K' && raw[j] !== 'H' && raw[j] !== 'J') j++;
+      if (j < n && raw[j] === 'm'){
+        applySgrCodes(raw.slice(i + 2, j), style);
+      }
+      i = (j < n) ? j + 1 : n;
+      continue;
+    }
+
+    if (c === '\r'){ col = 0; i++; continue; }
+    if (c === '\n'){ lines.push([]); col = 0; i++; continue; }
+    if (c === '\b'){ if (col > 0) col--; i++; continue; }
+
+    if (c === '\t'){
+      var next = col + (4 - (col % 4));
+      while (col < next){
+        lines[lines.length - 1][col] = { ch: ' ', cls: style.slice() };
+        col++;
+      }
+      i++;
+      continue;
+    }
+
+    lines[lines.length - 1][col] = { ch: c, cls: style.slice() };
+    col++;
+    i++;
+  }
+
+  return lines;
+}
+
+function cellsLineToHtml(cells){
+  if (!cells || !cells.length) return '';
+  var max = cells.length - 1;
+  while (max >= 0 && !cells[max]) max--;
+  if (max < 0) return '';
+
+  var html = '';
+  var buf = '';
+  var curCls = null;
+
+  for (var i = 0; i <= max; i++){
+    var cell = cells[i] || { ch: ' ', cls: [] };
+    var cls = cell.cls.join(' ');
+    if (cls !== curCls){
+      if (buf){
+        html += curCls ? '<span class="' + curCls + '">' + buf + '</span>' : buf;
+      }
+      buf = '';
+      curCls = cls;
+    }
+    buf += esc(cell.ch);
+  }
+  if (buf){
+    html += curCls ? '<span class="' + curCls + '">' + buf + '</span>' : buf;
+  }
+  return html || '&nbsp;';
+}
+
+function lineHasError(cells){
+  if (!cells || !cells.length) return false;
+  var text = '';
+  for (var i = 0; i < cells.length; i++){
+    if (cells[i] && cells[i].ch) text += cells[i].ch;
+  }
+  return /\[错误\]|error|失败|fatal/i.test(text);
+}
+
+function renderTerminalStream(raw, skin){
+  if (!raw) return '';
+  var view = raw.length > 400000 ? raw.slice(-400000) : raw;
+  var lines = parseAnsiCells(view);
+  var start = Math.max(0, lines.length - 1500);
+  var html = '';
+
+  for (var i = start; i < lines.length; i++){
+    var cells = lines[i];
+    var err = lineHasError(cells);
+    html += '<div class="term-line' + (err ? ' term-line-error' : '') + '">' +
+      cellsLineToHtml(cells) +
+    '</div>';
+  }
+  return html;
+}
+
+function trimTerminalDom(out){
+  if (!out) return;
+  var lines = out.querySelectorAll('.term-line');
+  var max = 1500;
+  if (lines.length > max){
+    for (var i = 0; i < lines.length - max; i++){
+      out.removeChild(lines[i]);
+    }
+  }
+}
+
+/* ------------------------------------------------------------
+   9.7 内嵌终端：皮肤、命令、HTML
+   ------------------------------------------------------------ */
+function detectTerminalSkin(platform, osRelease){
+  var p = String(platform || '').toLowerCase();
+  var os = String(osRelease || '');
+
+  if (p === 'win32' || p === 'windows' || p === 'windows_nt'){
+    var m = os.match(/10\.0\.(\d+)/);
+    var build = m ? parseInt(m[1], 10) : 0;
+    return build >= 22000 ? 'skin-win11' : 'skin-win10';
+  }
+  if (p === 'android') return 'skin-termux';
+  if (p === 'linux') return 'skin-macos';
+  return 'skin-macos';
+}
+
+function getTerminalSkin(){
+  return state.config.terminalSkin || 'skin-macos';
+}
+
+function shellPromptFor(skin){
+  if (skin === 'skin-win10') return 'PS C:\\Users\\Helix>';
+  if (skin === 'skin-win11') return '>';
+  return '$';
+}
+
+function extractCommand(tool){
+  var a = tool.args;
+  if (typeof a === 'string'){
+    try { a = JSON.parse(a); } catch(e){ return String(a || '').trim(); }
+  }
+  if (!a || typeof a !== 'object') return '';
+
+  var cmd = a.command || a.cmd || a.script || a.commandline || '';
+  var extra = a.args;
+  if (Array.isArray(cmd)) cmd = cmd.join(' ');
+
+  if (extra != null && extra !== cmd){
+    if (Array.isArray(extra)) extra = extra.join(' ');
+    if (typeof extra === 'object') extra = JSON.stringify(extra);
+    extra = String(extra);
+  } else {
+    extra = '';
+  }
+
+  return String(cmd || '') + (extra ? ' ' + extra : '');
+}
+
+function renderTerminalHeader(skin){
+  if (skin === 'skin-termux') return '';
+
+  if (skin === 'skin-macos'){
+    return '<div class="term-header term-header-macos">' +
+      '<div class="traffic-lights">' +
+        '<i class="tl-close"></i><i class="tl-min"></i><i class="tl-max"></i>' +
+      '</div>' +
+      '<span class="term-title">helix — zsh</span>' +
+    '</div>';
+  }
+
+  if (skin === 'skin-win11'){
+    return '<div class="term-header term-header-win11">' +
+      '<div class="term-tabs">' +
+        '<div class="term-tab active">' +
+          '<span class="term-tab-ico">' + icon('i-terminal', 'icon-sm') + '</span>' +
+          '<span class="term-tab-label">Windows PowerShell</span>' +
+          '<span class="term-tab-x">×</span>' +
+        '</div>' +
+        '<div class="term-tab-add">+</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  return '<div class="term-header term-header-win10">' +
+    '<span class="term-title">Windows PowerShell</span>' +
+  '</div>';
+}
+
+function buildInlineTerminalHtml(tool, skin, data){
+  var open = !!tool.terminalOpen;
+  var cmd = extractCommand(tool);
+  var prompt = shellPromptFor(skin);
+
+  return '<div class="inline-terminal-wrapper ' + skin + (open ? ' show' : '') + '" ' +
+      'data-call="' + esc(tool.callId || '') + '" style="' + (open ? '' : 'display:none') + '">' +
+    renderTerminalHeader(skin) +
+    '<div class="term-body">' +
+      '<div class="term-cmdline">' +
+        '<span class="term-prompt">' + esc(prompt) + '</span> ' +
+        '<span class="term-cmd">' + esc(cmd) + '</span>' +
+      '</div>' +
+      '<div class="term-output">' + renderTerminalStream(data, skin) + '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function renderInlineTerminal(tool, skin){
+  var data = tool.terminalData || '';
+  var key = skin + ':' + data.length + ':' + (tool.terminalOpen ? 1 : 0) +
+            ':' + data.slice(-24);
+  if (tool._termCache && tool._termCache.key === key){
+    return tool._termCache.html;
+  }
+  var html = buildInlineTerminalHtml(tool, skin, data);
+  tool._termCache = { key: key, html: html };
+  return html;
+}
+
+/* ------------------------------------------------------------
+   9.8 内嵌终端：工具卡片渲染
+   ------------------------------------------------------------ */
 function renderToolCard(tool){
-  const map = { running: '执行中', ok: '已完成', fail: '失败' };
-  const spin = tool.status === 'running' ? '<span class="spinner"></span>' : '';
-  const args = tool.args
+  var map = { running: '执行中', ok: '已完成', fail: '失败' };
+  var spin = tool.status === 'running' ? '<span class="spinner"></span>' : '';
+  var args = tool.args
     ? (typeof tool.args === 'string' ? tool.args : JSON.stringify(tool.args, null, 2))
     : '';
-  const result = tool.result || '';
-  
-  // ★ 使用 getToolIcon 根据工具名动态获取图标
-  const toolIcon = getToolIcon(tool.name);
+  var result = tool.result || '';
+  var toolIcon = getToolIcon(tool.name);
+  var isCmd = tool.name === 'run_command';
+
+  var btnTerm = isCmd
+    ? '<button class="btn-inline-term' + (tool.terminalOpen ? ' active' : '') + '" type="button" ' +
+        'data-call="' + esc(tool.callId || '') + '" title="展开 / 折叠终端">' +
+        icon('i-terminal', 'icon-sm') +
+      '</button>'
+    : '';
+
+  var termHtml = isCmd ? renderInlineTerminal(tool, getTerminalSkin()) : '';
 
   return '<div class="tool-card collapsed" data-call="' + esc(tool.callId || '') + '">' +
     '<div class="tool-head">' +
       '<span class="tool-ico">' + icon(toolIcon) + '</span>' +
       '<span class="tool-name">' + esc(tool.name || 'tool') + '</span>' +
       icon('i-chev-down', 'tool-caret') +
+      btnTerm +
       '<span class="tool-status ' + tool.status + '">' + spin + (map[tool.status] || '') + '</span>' +
     '</div>' +
     (args ?
       '<div class="tool-section"><span class="label">参数</span>' + esc(args) + '</div>' : '') +
     (result ?
       '<div class="tool-section result"><span class="label">结果</span>' + esc(result) + '</div>' : '') +
+    termHtml +
   '</div>';
 }
 
-function bindMessageActions(node){
-  node.querySelectorAll('[data-act]').forEach(btn => {
-    if (btn.dataset.bound) return;
-    btn.dataset.bound = '1';
-    btn.addEventListener('click', () => handleMessageAction(btn.dataset.act, btn.dataset.id));
-  });
-}
-
-function bindCodeCopy(root){
-  root.querySelectorAll('[data-copy]').forEach(btn => {
-    if (btn.dataset.bound) return;
-    btn.dataset.bound = '1';
-    btn.addEventListener('click', () => {
-      const pre = btn.closest('.code-block').querySelector('pre code');
-      if (!pre) return;
-      copyText(pre.textContent);
-      const old = btn.innerHTML;
-      btn.innerHTML = icon('i-check', 'icon-sm') + '已复制';
-      setTimeout(() => { btn.innerHTML = old; }, 1400);
-    });
-  });
-}
-
-function bindToolToggle(root){
-  root.querySelectorAll('.tool-head').forEach(head => {
-    if (head.dataset.bound) return;
-    head.dataset.bound = '1';
-    head.addEventListener('click', () => {
-      head.closest('.tool-card').classList.toggle('collapsed');
-    });
-  });
-}
-
-function bindReasoningToggle(root){
-  root.querySelectorAll('.reasoning-head').forEach(head => {
-    if (head.dataset.bound) return;
-    head.dataset.bound = '1';
-    head.addEventListener('click', () => {
-      head.closest('.reasoning').classList.toggle('collapsed');
-    });
-  });
-}
-
-function handleMessageAction(action, id){
-  const msg = state.messages.find(m => m.id === id);
-  if (!msg) return;
-
-  switch (action){
-    case 'copy':
-      copyText(msg.text).then(() => toast('已复制到剪贴板', 'success', 1500));
-      break;
-    case 'speak':
-      speak(msg.text);
-      break;
-    case 'regen':
-      regenerate();
-      break;
-    case 'edit':
-      el.promptInput.value = msg.text;
-      el.promptInput.focus();
-      autoResize();
-      break;
-    case 'retry':
-      resend(msg);
-      break;
-    case 'del':
-      removeMessage(id);
-      break;
-  }
-}
-
-function removeMessage(id){
-  const idx = state.messages.findIndex(m => m.id === id);
-  if (idx === -1) return;
-  state.messages.splice(idx, 1);
-  const node = state.nodes.get(id);
-  if (node) node.remove();
-  state.nodes.delete(id);
-  persistSession();
-  if (!state.messages.length) renderEmptyState();
-  toast('已删除消息', 'info', 1500);
-}
-
-/* ------------------------------------------------------------
-   10. 空状态
-   ------------------------------------------------------------ */
-const SUGGESTIONS = [
-  { ico: 'i-folder', t: '浏览当前目录', d: '看看工作目录里有哪些文件', q: '帮我列出当前工作目录下的文件结构' },
-  { ico: 'i-code', t: '写一段快速排序', d: 'Python 实现，带中文注释', q: '用 Python 写一个快速排序，加上详细的中文注释' },
-  { ico: 'i-terminal', t: '检查环境版本', d: '执行命令查看 Node 版本', q: '执行命令看一下当前环境里的 Node 和 npm 版本' },
-  { ico: 'i-sparkle', t: '画个预览图', d: '在预览面板渲染 HTML', q: '在预览面板渲染一个居中的渐变圆形，带轻微呼吸动画' },
-  { ico: 'i-book', t: '读一下 README', d: '总结项目在做什么', q: '读一下 README.md，用三句话总结这个项目' },
-  { ico: 'i-globe', t: '查最新版本', d: '搜索某个工具的最新版', q: '搜索一下 Vite 当前最新的稳定版本号' },
-  { ico: 'i-branch', t: '解释这段代码', d: '逐行说明它在做什么', q: '我贴一段代码给你，帮我逐行解释它在做什么，说人话' },
-  { ico: 'i-shield', t: '审查安全风险', d: '检查依赖与配置', q: '帮我检查这个项目的依赖里有没有已知的安全风险' },
-];
-
-function renderEmptyState(){
-  el.stream.innerHTML =
-    '<div class="empty">' +
-      '<svg class="empty-mark" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">' +
-        '<defs>' +
-          '<linearGradient id="emA" x1="18" y1="6" x2="46" y2="58" gradientUnits="userSpaceOnUse">' +
-            '<stop stop-color="#1f6feb"/><stop offset="1" stop-color="#a371f7"/>' +
-          '</linearGradient>' +
-          '<linearGradient id="emB" x1="46" y1="6" x2="18" y2="58" gradientUnits="userSpaceOnUse">' +
-            '<stop stop-color="#58a6ff"/><stop offset="1" stop-color="#d2a8ff"/>' +
-          '</linearGradient>' +
-        '</defs>' +
-        '<path d="M32 7C18.5 7 18.5 24 32 24s13.5 17 0 17-13.5 17 0 17" ' +
-          'stroke="url(#emA)" stroke-width="6.2" stroke-linecap="round" opacity=".5"/>' +
-        '<path d="M32 7c13.5 0 13.5 17 0 17S18.5 41 32 41s13.5 17 0 17" ' +
-          'stroke="url(#emB)" stroke-width="6.2" stroke-linecap="round"/>' +
-      '</svg>' +
-      '<h1>今天想让 Helix 做什么？' +
-        '<span id="markDone" style="display:inline-block;width:0;height:0;overflow:hidden">' +
-          '<!-- I can help with that -->' +
-        '</span>' +
-      '</h1>' +
-      '<p>本地优先的 AI Agent 工作台 · 会话数据只存在你的浏览器里</p>' +
-      '<div class="empty-tags">' +
-        '<span class="empty-tag">文件读写</span>' +
-        '<span class="empty-tag">命令执行</span>' +
-        '<span class="empty-tag">网页搜索</span>' +
-        '<span class="empty-tag">HTML 预览</span>' +
-        '<span class="empty-tag">多轮推理</span>' +
-      '</div>' +
-      '<div class="suggest-grid">' +
-        SUGGESTIONS.map(s =>
-          '<button class="suggest" data-q="' + esc(s.q) + '">' +
-            '<span class="suggest-ico">' + icon(s.ico) + '</span>' +
-            '<span class="suggest-txt">' +
-              '<span class="suggest-t">' + esc(s.t) + '</span>' +
-              '<span class="suggest-d">' + esc(s.d) + '</span>' +
-            '</span>' +
-          '</button>'
-        ).join('') +
-      '</div>' +
-    '</div>';
-
-  el.stream.querySelectorAll('.suggest').forEach(btn => {
-    btn.addEventListener('click', () => {
-      el.promptInput.value = btn.dataset.q;
-      el.promptInput.focus();
-      autoResize();
-    });
-  });
-}
-
-function clearEmptyState(){
-  const node = el.stream.querySelector('.empty');
-  if (node) node.remove();
-}
-
-/* ------------------------------------------------------------
-   11. 语音
-   ------------------------------------------------------------ */
-let speakingUtterance = null;
-
-function speak(text){
-  if (!('speechSynthesis' in window)){
-    toast('当前浏览器不支持语音朗读', 'warn');
-    return;
-  }
-  const synth = window.speechSynthesis;
-  if (synth.speaking){
-    synth.cancel();
-    return;
-  }
-  const clean = String(text)
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/`[^`]*`/g, '')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/[#>*_~\-]{1,}/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!clean) return;
-
-  const u = new SpeechSynthesisUtterance(clean.slice(0, 4000));
-  u.lang = 'zh-CN';
-  u.rate = 1.05;
-  u.pitch = 1;
-  u.onend = () => { speakingUtterance = null; };
-  u.onerror = () => { speakingUtterance = null; };
-  speakingUtterance = u;
-  synth.speak(u);
-}
-
-/* ------------------------------------------------------------
-   12. WebSocket
-   ------------------------------------------------------------ */
-function connect(){
-  if (state.socket && (state.socket.readyState === WebSocket.OPEN ||
-                       state.socket.readyState === WebSocket.CONNECTING)) return;
-
-  const params = new URLSearchParams(location.search);
-  const token = params.get('token') || '';
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-
-  if (!location.host || location.protocol === 'file:'){
-    enterOfflineMode('本地文件模式');
-    return;
-  }
-
-  setConn('pending', '连接中');
-
-  let socket;
-  try {
-    socket = new WebSocket(proto + '//' + location.host + '/ws?token=' + encodeURIComponent(token));
-  } catch (e){
-    enterOfflineMode('无法建立连接');
-    return;
-  }
-  state.socket = socket;
-
-  socket.addEventListener('open', () => {
-    state.connected = true;
-    state.offline = false;
-    state.reconnectAttempts = 0;
-    setConn('ok', '已连接');
-  });
-
-  socket.addEventListener('close', ev => {
-    state.connected = false;
-    if (ev.code === 4001 || ev.code === 4003){
-      setConn('err', '未授权');
-      return;
+function findToolByCallId(callId){
+  if (!callId) return null;
+  for (var i = 0; i < state.messages.length; i++){
+    var tools = state.messages[i].tools;
+    if (!tools) continue;
+    for (var j = 0; j < tools.length; j++){
+      if (tools[j] && tools[j].callId === callId) return tools[j];
     }
-    setConn('err', '已断开');
-    scheduleReconnect();
-  });
-
-  socket.addEventListener('error', () => {
-    if (!state.connected) enterOfflineMode('连接失败');
-  });
-
-  socket.addEventListener('message', ev => {
-    let msg;
-    try { msg = JSON.parse(ev.data); } catch(e){ return; }
-    handleServerMessage(msg);
-  });
-}
-
-function scheduleReconnect(){
-  if (state.offline) return;
-  clearTimeout(state.reconnectTimer);
-  const delay = Math.min(1500 * Math.pow(1.6, state.reconnectAttempts++), 20000);
-  state.reconnectTimer = setTimeout(() => {
-    if (!state.connected && !state.offline) connect();
-  }, delay);
-}
-
-function enterOfflineMode(reason){
-  if (state.offline) return;
-  state.offline = true;
-  state.connected = false;
-  setConn('pending', '离线演示');
-  toast(reason + '，已切换为离线演示模式', 'warn', 3600);
-}
-
-function setConn(cls, text){
-  el.connPill.className = 'conn-pill ' + cls;
-  el.connLabel.textContent = text;
-}
-
-function sendSocket(payload){
-  if (!state.socket || state.socket.readyState !== WebSocket.OPEN) return false;
-  state.socket.send(JSON.stringify(payload));
-  return true;
-}
-
-function handleServerMessage(m){
-  switch (m.type){
-    case 'ready':
-      if (m.model) { state.config.model = m.model; el.modelLabel.textContent = m.model; }
-      if (m.workspace) state.config.workspace = m.workspace;
-      break;
-    case 'assistant_delta':
-      appendDelta(m.text);
-      break;
-    case 'reasoning_delta':
-      appendReasoning(m.text);
-      break;
-    case 'tool_start':
-      onToolStart(m);
-      break;
-    case 'tool_end':
-      onToolEnd(m);
-      break;
-    case 'approval_request':
-      showApproval(m);
-      break;
-    case 'preview':
-      showPreview(m.html);
-      break;
-    case 'balance':
-      showBalance(m);
-      break;
-    case 'done':
-      finishStream();
-      break;
-    case 'error':
-      onStreamError(m.message || '发生未知错误');
-      break;
   }
+  return null;
+}
+
+function bindInlineTermToggles(root){
+  root.querySelectorAll('.btn-inline-term').forEach(function(btn){
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+
+      var callId = btn.dataset.call;
+      var tool = findToolByCallId(callId);
+      var wrapper = root.querySelector('.inline-terminal-wrapper[data-call="' + callId + '"]');
+      if (!tool || !wrapper) return;
+
+      var open = !wrapper.classList.contains('show');
+      wrapper.classList.toggle('show', open);
+      wrapper.style.display = open ? '' : 'none';
+      tool.terminalOpen = open;
+      btn.classList.toggle('active', open);
+
+      if (open){
+        var out = wrapper.querySelector('.term-output');
+        if (out){
+          out.innerHTML = renderTerminalStream(tool.terminalData || '', getTerminalSkin());
+          trimTerminalDom(out);
+        }
+        var body = wrapper.querySelector('.term-body');
+        if (body) body.scrollTop = body.scrollHeight;
+      }
+      persistSession();
+    });
+  });
 }
 
 /* ------------------------------------------------------------
-   13. 流式消息
+   10. 流式消息
    ------------------------------------------------------------ */
 function currentAssistant(){
   let msg = state.messages.find(m => m.id === state.assistantId);
@@ -1414,6 +1754,8 @@ function onToolStart(m){
     args: m.args,
     status: 'running',
     result: '',
+    terminalData: '',
+    terminalOpen: false,
   });
   paintMessage(msg);
   autoFollow();
@@ -1428,6 +1770,87 @@ function onToolEnd(m){
   }
   paintMessage(msg);
   autoFollow();
+}
+
+/* ------------------------------------------------------------
+   10.5 内嵌终端：接管 terminal_output
+   ------------------------------------------------------------ */
+function onTerminalOutput(m){
+  var callId = m.callId;
+  if (!callId) return;
+
+  var tool = findToolByCallId(callId);
+  if (!tool) return;
+
+  var text = m.text == null ? '' : String(m.text);
+
+  tool.terminalData = (tool.terminalData || '') + text;
+  if (tool.terminalData.length > 800000){
+    tool.terminalData = tool.terminalData.slice(-800000);
+  }
+  tool._termCache = null;
+
+  var wrapper = el.stream.querySelector(
+    '.inline-terminal-wrapper[data-call="' + callId + '"]'
+  );
+  if (!wrapper || !wrapper.classList.contains('show')) return;
+
+  var out = wrapper.querySelector('.term-output');
+  var body = wrapper.querySelector('.term-body');
+  if (!out) return;
+
+  var near = body ? (body.scrollHeight - body.scrollTop - body.clientHeight <= 48) : true;
+
+  if (tool._termRaf) cancelAnimationFrame(tool._termRaf);
+  tool._termRaf = requestAnimationFrame(function(){
+    tool._termRaf = null;
+    if (!wrapper.isConnected || !wrapper.classList.contains('show')) return;
+
+    out.innerHTML = renderTerminalStream(tool.terminalData || '', getTerminalSkin());
+    trimTerminalDom(out);
+
+    if (near && body) body.scrollTop = body.scrollHeight;
+  });
+}
+
+/* ------------------------------------------------------------
+   10.6 皮肤切换后重应用
+   ------------------------------------------------------------ */
+function reapplyTerminalSkin(){
+  var skin = getTerminalSkin();
+  var wrappers = el.stream.querySelectorAll('.inline-terminal-wrapper');
+  if (!wrappers.length) return;
+
+  wrappers.forEach(function(w){
+    w.classList.remove('skin-macos', 'skin-win10', 'skin-win11', 'skin-termux');
+    w.classList.add(skin);
+
+    var callId = w.dataset.call;
+    var tool = findToolByCallId(callId);
+    if (!tool) return;
+
+    var oldHeader = w.querySelector('.term-header');
+    var newHeaderHtml = renderTerminalHeader(skin);
+    if (oldHeader){
+      if (newHeaderHtml){
+        oldHeader.outerHTML = newHeaderHtml;
+      } else {
+        oldHeader.remove();
+      }
+    } else if (newHeaderHtml){
+      w.insertAdjacentHTML('afterbegin', newHeaderHtml);
+    }
+
+    var promptEl = w.querySelector('.term-prompt');
+    if (promptEl) promptEl.textContent = shellPromptFor(skin);
+
+    var out = w.querySelector('.term-output');
+    if (out){
+      out.innerHTML = renderTerminalStream(tool.terminalData || '', skin);
+      trimTerminalDom(out);
+    }
+    tool._termCache = null;
+  });
 }
 
 function finishStream(){
@@ -1461,8 +1884,20 @@ function onStreamError(message){
 }
 
 /* ------------------------------------------------------------
-   14. 发送 / 中止 / 重生成
+   11. 发送 / 中止 / 重生成
    ------------------------------------------------------------ */
+function buildWireHistory(){
+  const out = [];
+  for (let i = 0; i < state.messages.length; i++){
+    const m = state.messages[i];
+    if (!m) continue;
+    if (m.role !== 'user' && m.role !== 'assistant') continue;
+    if (!m.text) continue;
+    out.push({ role: m.role, content: m.text });
+  }
+  return out;
+}
+
 function updateSendButton(){
   if (state.streaming){
     el.btnSend.classList.add('stop');
@@ -1476,6 +1911,8 @@ function updateSendButton(){
 function sendMessage(){
   const text = el.promptInput.value.trim();
   if (!text || state.streaming) return;
+
+  ensureCurrentSession();
 
   const attachments = state.attachments.slice();
   let fullText = text;
@@ -1518,6 +1955,9 @@ function sendMessage(){
     type: 'user_message',
     text: fullText,
     clientMsgId: clientMsgId,
+    history: buildWireHistory(),
+    sessionId: state.currentId,
+    useAiTitle: state.config.useAiTitle || false,
   });
 
   if (ok){
@@ -1558,6 +1998,8 @@ function regenerate(){
   }
   if (!lastUser){ toast('没有可重新生成的内容', 'warn'); return; }
 
+  ensureCurrentSession();
+
   let cut = state.messages.indexOf(lastUser) + 1;
   state.messages.slice(cut).forEach(m => {
     const node = state.nodes.get(m.id);
@@ -1571,7 +2013,14 @@ function regenerate(){
   updateSendButton();
 
   const clientMsgId = uid('cm');
-  const ok = sendSocket({ type: 'user_message', text: lastUser.text, clientMsgId: clientMsgId });
+  const ok = sendSocket({
+    type: 'user_message',
+    text: lastUser.text,
+    clientMsgId: clientMsgId,
+    history: buildWireHistory(),
+    sessionId: state.currentId,
+    useAiTitle: state.config.useAiTitle || false,
+  });
   if (ok){
     try {
       localStorage.setItem(KEY.pending, JSON.stringify({
@@ -1590,6 +2039,8 @@ function resend(msg){
   const idx = state.messages.indexOf(msg);
   if (idx === -1) return;
 
+  ensureCurrentSession();
+
   state.messages.slice(idx).forEach(m => {
     const node = state.nodes.get(m.id);
     if (node) node.remove();
@@ -1602,7 +2053,14 @@ function resend(msg){
   updateSendButton();
 
   const clientMsgId = uid('cm');
-  const ok = sendSocket({ type: 'user_message', text: msg.text, clientMsgId: clientMsgId });
+  const ok = sendSocket({
+    type: 'user_message',
+    text: msg.text,
+    clientMsgId: clientMsgId,
+    history: buildWireHistory(),
+    sessionId: state.currentId,
+    useAiTitle: state.config.useAiTitle || false,
+  });
   if (ok){
     try {
       localStorage.setItem(KEY.pending, JSON.stringify({
@@ -1617,7 +2075,7 @@ function resend(msg){
 }
 
 /* ------------------------------------------------------------
-   14.5 未完成任务恢复
+   11.5 未完成任务恢复
    ------------------------------------------------------------ */
 let pollTimer = null;
 let pollRetries = 0;
@@ -1660,8 +2118,7 @@ async function restorePendingTask(){
     if (!res.ok) return;
     const snap = await res.json();
     applyTaskSnapshot(snap);
-  } catch(e){
-  }
+  } catch(e){}
 }
 
 function applyTaskSnapshot(snap){
@@ -1695,6 +2152,8 @@ function applyTaskSnapshot(snap){
     args: t.args,
     status: t.status || 'ok',
     result: t.result || '',
+    terminalData: t.terminalData || '',
+    terminalOpen: !!t.terminalOpen,
   })) : [];
   msg.streaming = snap.status === 'running';
 
@@ -1758,7 +2217,7 @@ function schedulePoll(taskId, isRetry){
 }
 
 /* ------------------------------------------------------------
-   15. 离线演示
+   12. 离线演示（内嵌终端版）
    ------------------------------------------------------------ */
 function runOfflineDemo(prompt){
   const lower = prompt.toLowerCase();
@@ -1776,6 +2235,8 @@ function runOfflineDemo(prompt){
       args: JSON.stringify({ target: 'preview_panel' }, null, 2),
       status: 'running',
       result: '',
+      terminalData: '',
+      terminalOpen: false,
     });
     preview = buildDemoHtml();
     text =
@@ -1795,9 +2256,11 @@ function runOfflineDemo(prompt){
     tools.push({
       callId: uid('call'),
       name: 'run_command',
-      args: JSON.stringify({ cmd: 'node -v && npm -v', cwd: state.config.workspace || '~' }, null, 2),
+      args: JSON.stringify({ command: 'node -v && npm -v', cwd: state.config.workspace || '~' }, null, 2),
       status: 'running',
       result: '',
+      terminalData: '',
+      terminalOpen: true,
     });
     text =
       '我先看一下当前环境里装了哪些运行时。\n\n' +
@@ -1851,7 +2314,6 @@ function runOfflineDemo(prompt){
 
   function startTools(){
     if (!tools.length){ startText(); return; }
-    let ti = 0;
     const tool = tools[0];
     assistant.tools.push(tool);
     paintMessage(assistant);
@@ -1860,11 +2322,16 @@ function runOfflineDemo(prompt){
     setTimeout(() => {
       if (state.abortFlag) return;
       tool.status = 'ok';
-      tool.result = looksLikeHtml
-        ? '已渲染 1280×720 预览画布'
-        : '命令已排队等待授权';
+      if (looksLikeHtml){
+        tool.result = '已渲染 1280×720 预览画布';
+        if (preview) showPreview(preview);
+      } else {
+        tool.result = '命令已排队等待授权';
+        tool.terminalData =
+          'v20.10.0\n' +
+          '10.2.3\n';
+      }
       paintMessage(assistant);
-      if (preview) showPreview(preview);
       startText();
     }, 700);
   }
@@ -1917,7 +2384,7 @@ function buildDemoHtml(){
 }
 
 /* ------------------------------------------------------------
-   16. 输入框
+   13. 输入框 / 附件 / 语音
    ------------------------------------------------------------ */
 function autoResize(){
   const ta = el.promptInput;
@@ -1937,9 +2404,6 @@ el.btnSend.addEventListener('click', () => {
   else sendMessage();
 });
 
-/* ------------------------------------------------------------
-   附件读取 —— 文本文件自动读取内容
-   ------------------------------------------------------------ */
 const TEXT_EXT = ['txt','md','markdown','json','js','mjs','cjs','ts','tsx','jsx','py','rb','go','rs','java','c','h','cpp','hpp','cs','php','swift','kt','html','htm','css','scss','sass','less','xml','yaml','yml','toml','ini','conf','env','csv','tsv','log','sh','bash','zsh','fish','bat','ps1','sql','vue','svg'];
 
 function isTextFile(name, type){
@@ -1949,8 +2413,8 @@ function isTextFile(name, type){
   return TEXT_EXT.indexOf(m[1]) !== -1;
 }
 
-const ATTACH_MAX_READ = 200 * 1024;   /* 超过 200KB 不读 */
-const ATTACH_MAX_KEEP = 50 * 1024;    /* 内容超过 50KB 截断 */
+const ATTACH_MAX_READ = 200 * 1024;
+const ATTACH_MAX_KEEP = 50 * 1024;
 
 async function buildAttachment(file){
   const a = {
@@ -1961,16 +2425,13 @@ async function buildAttachment(file){
     sizeRaw: file.size,
   };
 
-  /* 非文本文件：不读内容 */
   if (!isTextFile(file.name, file.type)) return a;
 
-  /* 文件过大：不读，改名字 */
   if (file.size > ATTACH_MAX_READ){
     a.name = a.name + '（文件过大，未读取）';
     return a;
   }
 
-  /* 读取内容 */
   try {
     let content = await file.text();
     if (content.length > ATTACH_MAX_KEEP){
@@ -1979,7 +2440,7 @@ async function buildAttachment(file){
       a.truncated = true;
     }
     a.content = content;
-  } catch(e){ /* 读取失败就当普通附件 */ }
+  } catch(e){}
 
   return a;
 }
@@ -2060,39 +2521,75 @@ el.btnMic.addEventListener('click', () => {
 });
 
 /* ------------------------------------------------------------
-   17. 滚动跟随
+   14. 滚动跟随
    ------------------------------------------------------------ */
 let unreadCount = 0;
+let stickToBottom = true;
+let programmaticScroll = false;
+let followRaf = null;
 
-function nearBottom(){
+function nearBottom(threshold){
   const s = el.chatScroll;
-  return s.scrollHeight - s.scrollTop - s.clientHeight < 180;
+  const t = threshold == null ? 180 : threshold;
+  return s.scrollHeight - s.scrollTop - s.clientHeight <= t;
+}
+
+function jumpToBottomInternal(smooth){
+  if (smooth){
+    programmaticScroll = true;
+    el.chatScroll.scrollTo({
+      top: el.chatScroll.scrollHeight,
+      behavior: 'smooth',
+    });
+    setTimeout(() => { programmaticScroll = false; }, 650);
+  } else {
+    programmaticScroll = true;
+    el.chatScroll.scrollTop = el.chatScroll.scrollHeight;
+    requestAnimationFrame(() => { programmaticScroll = false; });
+  }
 }
 
 function autoFollow(){
   if (!state.ui.autoScroll) return;
-  if (nearBottom()){
-    requestAnimationFrame(() => { el.chatScroll.scrollTop = el.chatScroll.scrollHeight; });
-  } else {
-    unreadCount++;
-    el.jumpBadge.textContent = String(unreadCount);
-    el.jumpBadge.hidden = false;
-    el.jumpBtn.hidden = false;
+
+  if (!stickToBottom){
+    if (state.streaming){
+      unreadCount++;
+      el.jumpBadge.textContent = String(unreadCount);
+      el.jumpBadge.hidden = false;
+      el.jumpBtn.hidden = false;
+    }
+    return;
   }
+
+  if (followRaf) return;
+  followRaf = requestAnimationFrame(() => {
+    followRaf = null;
+    if (!stickToBottom) return;
+    jumpToBottomInternal(false);
+  });
 }
 
 function scrollToBottom(smooth){
-  el.chatScroll.scrollTo({
-    top: el.chatScroll.scrollHeight,
-    behavior: smooth ? 'smooth' : 'auto',
-  });
+  stickToBottom = true;
   unreadCount = 0;
   el.jumpBadge.hidden = true;
   el.jumpBtn.hidden = true;
+
+  if (smooth){
+    jumpToBottomInternal(true);
+  } else {
+    requestAnimationFrame(() => jumpToBottomInternal(false));
+  }
 }
 
 el.chatScroll.addEventListener('scroll', () => {
-  if (nearBottom()){
+  if (programmaticScroll) return;
+
+  const atBottom = nearBottom(80);
+  stickToBottom = atBottom;
+
+  if (atBottom){
     el.jumpBtn.hidden = true;
     unreadCount = 0;
     el.jumpBadge.hidden = true;
@@ -2104,7 +2601,7 @@ el.chatScroll.addEventListener('scroll', () => {
 el.jumpBtn.addEventListener('click', () => scrollToBottom(true));
 
 /* ------------------------------------------------------------
-   18. 预览面板
+   15. 预览面板
    ------------------------------------------------------------ */
 function showPreview(html){
   state.previewHtml = html || '';
@@ -2176,7 +2673,7 @@ el.prevOpen.addEventListener('click', () => {
 })();
 
 /* ------------------------------------------------------------
-   19. 侧栏 / 遮罩
+   16. 侧栏 / 遮罩
    ------------------------------------------------------------ */
 function openSidebar(){
   el.sidebar.classList.remove('collapsed');
@@ -2215,6 +2712,11 @@ el.scrim.addEventListener('click', () => {
   }
 });
 
+el.btnNew.addEventListener('click', () => {
+  newSession();
+  if (window.innerWidth > 900) el.promptInput.focus();
+});
+
 (function swipeGesture(){
   let startX = 0, startY = 0, tracking = false;
 
@@ -2243,22 +2745,72 @@ el.scrim.addEventListener('click', () => {
 })();
 
 /* ------------------------------------------------------------
-   20. 设置抽屉
+   17. 设置抽屉
    ------------------------------------------------------------ */
+let drawerSnapshot = null;
+
+function captureDrawerSnapshot(){
+  ensureAiTitleOption();
+  const val = id => {
+    const n = $(id);
+    return n ? String(n.value == null ? '' : n.value) : '';
+  };
+  const chk = id => {
+    const n = $(id);
+    return n ? !!n.checked : false;
+  };
+  return JSON.stringify({
+    workspace: val('cfgWorkspace'),
+    baseUrl: val('cfgBaseUrl'),
+    model: val('cfgModel'),
+    systemPrompt: val('cfgSystemPrompt'),
+    temperature: val('cfgTemperature'),
+    maxTokens: val('cfgMaxTokens'),
+    cmdTimeout: val('cfgCmdTimeout'),
+    permMode: (document.querySelector('input[name="permMode"]:checked') || {}).value || '',
+    useAiTitle: chk('cfgUseAiTitle'),
+    lang: val('cfgLang'),
+    fontSize: val('cfgFontSize'),
+    autoScroll: chk('cfgAutoScroll'),
+    animations: chk('cfgAnimations'),
+    autoPreview: chk('cfgAutoPreview'),
+    apiKey: val('cfgApiKey'),
+  });
+}
+
 function openDrawer(){
   el.drawer.classList.add('on');
   openScrim();
   loadConfigToUI();
+  drawerSnapshot = captureDrawerSnapshot();
 }
-function closeDrawer(){
+
+function doCloseDrawer(){
   el.drawer.classList.remove('on');
+  editingProfileId = null;
+  drawerSnapshot = null;
+  hideUnsavedDialog();
   if (!el.sidebar.classList.contains('open') &&
       !(state.previewOpen && window.innerWidth <= 900)) closeScrim();
 }
 
+function closeDrawer(force){
+  if (!force && drawerSnapshot !== null){
+    let dirty = false;
+    try {
+      dirty = captureDrawerSnapshot() !== drawerSnapshot;
+    } catch(e){ dirty = false; }
+    if (dirty){
+      showUnsavedDialog();
+      return;
+    }
+  }
+  doCloseDrawer();
+}
+
 el.btnSettings.addEventListener('click', openDrawer);
-el.drawerClose.addEventListener('click', closeDrawer);
-el.drawerCancel.addEventListener('click', closeDrawer);
+el.drawerClose.addEventListener('click', () => closeDrawer());
+el.drawerCancel.addEventListener('click', () => closeDrawer());
 
 el.drawer.querySelectorAll('.dtab').forEach(tab => {
   tab.addEventListener('click', () => {
@@ -2270,19 +2822,121 @@ el.drawer.querySelectorAll('.dtab').forEach(tab => {
   });
 });
 
+(function injectUnsavedDialogStyle(){
+  if (document.getElementById('helix-unsaved-style')) return;
+  const s = document.createElement('style');
+  s.id = 'helix-unsaved-style';
+  s.textContent = [
+    '.helix-unsaved-mask{position:fixed;inset:0;z-index:2200;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:20px;animation:huFade .14s ease-out}',
+    '@keyframes huFade{from{opacity:0}to{opacity:1}}',
+    '.helix-unsaved-panel{width:min(400px,100%);background:var(--canvas-overlay,#161b22);border:1px solid var(--border-default,#30363d);border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,.55);padding:18px 18px 14px;color:var(--fg-default,#e6edf3);animation:huPop .16s ease-out}',
+    '@keyframes huPop{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}',
+    '.helix-unsaved-title{font-size:15px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:8px}',
+    '.helix-unsaved-title .icon{width:18px;height:18px;color:var(--attention-fg,#d29922)}',
+    '.helix-unsaved-desc{font-size:13px;color:var(--fg-muted,#8b949e);line-height:1.6;margin-bottom:16px}',
+    '.helix-unsaved-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}',
+    '.helix-unsaved-actions .btn{min-width:82px;justify-content:center}'
+  ].join('\n');
+  document.head.appendChild(s);
+})();
+
+function hideUnsavedDialog(){
+  const m = document.getElementById('helixUnsavedDialog');
+  if (m) m.remove();
+}
+
+function showUnsavedDialog(){
+  hideUnsavedDialog();
+
+  const mask = document.createElement('div');
+  mask.id = 'helixUnsavedDialog';
+  mask.className = 'helix-unsaved-mask';
+  mask.innerHTML =
+    '<div class="helix-unsaved-panel">' +
+      '<div class="helix-unsaved-title">' +
+        icon('i-alert') + '你有修改未保存' +
+      '</div>' +
+      '<div class="helix-unsaved-desc">' +
+        '关闭设置面板前，是否保存当前修改？' +
+      '</div>' +
+      '<div class="helix-unsaved-actions">' +
+        '<button class="btn" data-act="cancel" type="button">继续编辑</button>' +
+        '<button class="btn danger" data-act="discard" type="button">放弃修改</button>' +
+        '<button class="btn primary" data-act="save" type="button">' +
+          icon('i-check') + '确认修改' +
+        '</button>' +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(mask);
+
+  mask.addEventListener('click', e => {
+    if (e.target === mask) hideUnsavedDialog();
+  });
+  mask.querySelector('[data-act="cancel"]').addEventListener('click', () => {
+    hideUnsavedDialog();
+  });
+  mask.querySelector('[data-act="discard"]').addEventListener('click', () => {
+    hideUnsavedDialog();
+    doCloseDrawer();
+  });
+  mask.querySelector('[data-act="save"]').addEventListener('click', () => {
+    hideUnsavedDialog();
+    saveConfigFromUI();
+  });
+}
+
+function ensureAiTitleOption(){
+  if (document.getElementById('cfgUseAiTitle')) return;
+
+  const pane = el.drawer.querySelector('[data-pane="general"]');
+  if (!pane) return;
+
+  const anchor = document.getElementById('cfgAutoPreview');
+  const anchorLabel = anchor
+    ? (anchor.closest('label') || anchor.parentNode)
+    : null;
+
+  const label = document.createElement('label');
+  label.className = 'opt';
+  label.setAttribute('data-helix-auto-title', '1');
+  label.innerHTML =
+    '<input type="checkbox" id="cfgUseAiTitle">' +
+    '<span class="opt-txt">' +
+      '<span class="opt-title">AI 自动生成标题</span>' +
+      '<span class="opt-desc">在对话结束后，让模型根据内容自动命名</span>' +
+    '</span>';
+
+  if (anchorLabel && anchorLabel.parentNode === pane){
+    if (anchorLabel.nextSibling){
+      pane.insertBefore(label, anchorLabel.nextSibling);
+    } else {
+      pane.appendChild(label);
+    }
+  } else {
+    pane.appendChild(label);
+  }
+}
+
 function loadConfigToUI(){
   const c = state.config;
   $('cfgWorkspace').value = c.workspace || '';
-  $('cfgBaseUrl').value = c.baseUrl || '';
-  $('cfgModel').value = c.model || '';
   $('cfgSystemPrompt').value = c.systemPrompt || DEFAULT_PROMPT;
   $('cfgTemperature').value = c.temperature;
   $('cfgMaxTokens').value = c.maxTokens;
   $('cfgCmdTimeout').value = c.cmdTimeout;
 
+  const targetP = editingProfileId
+    ? (c.profiles || []).find(x => x.id === editingProfileId)
+    : (c.profiles || []).find(x => x.id === c.activeProfileId);
+
+  $('cfgModel').value = targetP ? (targetP.model || '') : (c.model || '');
+  $('cfgBaseUrl').value = targetP ? (targetP.baseUrl || '') : (c.baseUrl || '');
+
   const apiKey = $('cfgApiKey');
   apiKey.value = '';
-  apiKey.placeholder = c.hasKey ? '已保存（留空则保持不变）' : 'sk-...';
+  const hasKey = targetP ? !!targetP.hasKey : !!c.hasKey;
+  apiKey.placeholder = hasKey ? '已保存（留空则保持不变）' : 'sk-...';
 
   document.querySelectorAll('input[name="permMode"]').forEach(r => {
     r.checked = r.value === (c.permissionMode || 'auto');
@@ -2294,7 +2948,12 @@ function loadConfigToUI(){
   $('cfgAnimations').checked = state.ui.animations;
   $('cfgAutoPreview').checked = state.ui.autoPreview;
 
+  ensureAiTitleOption();
+  const aiTitleEl = $('cfgUseAiTitle');
+  if (aiTitleEl) aiTitleEl.checked = state.config.useAiTitle || false;
+
   renderAllowList();
+  renderProfileManager();
 }
 
 function renderAllowList(){
@@ -2308,22 +2967,60 @@ function renderAllowList(){
 }
 
 function saveConfigFromUI(){
+  ensureAiTitleOption();
+  const aiTitleEl = $('cfgUseAiTitle');
+  const useAiTitle = aiTitleEl ? !!aiTitleEl.checked : false;
+
+  const modelVal = $('cfgModel').value.trim();
+  const baseUrlVal = $('cfgBaseUrl').value.trim();
+  const apiKeyVal = $('cfgApiKey').value.trim();
+
+  const targetProfileId = editingProfileId || state.config.activeProfileId;
+  const targetProfile = (state.config.profiles || []).find(x => x.id === targetProfileId);
+
+  if (targetProfile){
+    targetProfile.model = modelVal;
+    targetProfile.baseUrl = baseUrlVal;
+    if (apiKeyVal) targetProfile.hasKey = true;
+  } else if (state.config.profiles && state.config.profiles.length){
+    const active = state.config.profiles.find(x => x.id === state.config.activeProfileId);
+    if (active){
+      active.model = modelVal;
+      active.baseUrl = baseUrlVal;
+      if (apiKeyVal) active.hasKey = true;
+    }
+  }
+
+  if (!targetProfileId || targetProfileId === state.config.activeProfileId){
+    state.config.model = modelVal;
+    state.config.baseUrl = baseUrlVal;
+    if (apiKeyVal) state.config.hasKey = true;
+    el.modelLabel.textContent = state.config.model || '未配置';
+  }
+
   const payload = {
     workspace: $('cfgWorkspace').value.trim(),
-    baseUrl: $('cfgBaseUrl').value.trim(),
-    model: $('cfgModel').value.trim(),
+    baseUrl: baseUrlVal,
+    model: modelVal,
     systemPrompt: $('cfgSystemPrompt').value,
     temperature: parseFloat($('cfgTemperature').value) || 0.7,
     maxTokens: parseInt($('cfgMaxTokens').value, 10) || 4096,
     cmdTimeout: parseInt($('cfgCmdTimeout').value, 10) || 30,
     permissionMode: (document.querySelector('input[name="permMode"]:checked') || {}).value || 'auto',
+    useAiTitle: useAiTitle,
+    activeProfileId: state.config.activeProfileId,
+    profiles: state.config.profiles,
+    targetProfileId: targetProfileId,
   };
+  if (apiKeyVal) payload.apiKey = apiKeyVal;
 
-  const apiKey = $('cfgApiKey').value.trim();
-  if (apiKey) payload.apiKey = apiKey;
-
-  Object.assign(state.config, payload);
-  state.config.hasKey = state.config.hasKey || !!apiKey;
+  state.config.workspace = payload.workspace;
+  state.config.systemPrompt = payload.systemPrompt;
+  state.config.temperature = payload.temperature;
+  state.config.maxTokens = payload.maxTokens;
+  state.config.cmdTimeout = payload.cmdTimeout;
+  state.config.permissionMode = payload.permissionMode;
+  state.config.useAiTitle = useAiTitle;
 
   state.ui.lang = $('cfgLang').value;
   state.ui.fontSize = parseInt($('cfgFontSize').value, 10) || 14;
@@ -2342,17 +3039,22 @@ function saveConfigFromUI(){
   .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
   .then(cfg => {
     if (cfg && typeof cfg === 'object'){
-      state.config.hasKey = !!cfg.hasKey;
+      if (typeof cfg.hasKey === 'boolean') state.config.hasKey = cfg.hasKey;
+      if (Array.isArray(cfg.profiles)) state.config.profiles = cfg.profiles;
+      if (cfg.activeProfileId) state.config.activeProfileId = cfg.activeProfileId;
+      if (cfg.profileHasKey && targetProfile) targetProfile.hasKey = true;
     }
+    editingProfileId = null;
     toast('设置已保存', 'success');
   })
   .catch(() => {
+    editingProfileId = null;
     toast('设置已保存在本地（后端未响应）', 'warn', 3000);
   });
 
   $('cfgApiKey').value = '';
   $('cfgApiKey').placeholder = state.config.hasKey ? '已保存（留空则保持不变）' : 'sk-...';
-  closeDrawer();
+  doCloseDrawer();
 }
 
 el.drawerSave.addEventListener('click', saveConfigFromUI);
@@ -2400,7 +3102,7 @@ $('btnResetAll').addEventListener('click', () => {
 });
 
 /* ------------------------------------------------------------
-   21. 权限模式
+   18. 权限模式
    ------------------------------------------------------------ */
 function updateModeChip(){
   const mode = state.config.permissionMode || 'auto';
@@ -2419,15 +3121,318 @@ el.chipMode.addEventListener('click', () => {
   toast('权限模式：' + next + ' · ' + MODE_META[next].desc, 'info', 2400);
 });
 
-el.chipModel.addEventListener('click', () => {
-  openDrawer();
+/* ------------------------------------------------------------
+   18.5 多 Profile 管理
+   ------------------------------------------------------------ */
+(function injectProfileStyle(){
+  if (document.getElementById('helix-profile-style')) return;
+  const s = document.createElement('style');
+  s.id = 'helix-profile-style';
+  s.textContent = [
+    '.profile-menu{position:fixed;z-index:1300;min-width:250px;max-width:340px;background:var(--canvas-overlay,#161b22);border:1px solid var(--border-default,#30363d);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:6px;font-size:13px;animation:profileMenuIn .12s ease-out}',
+    '@keyframes profileMenuIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}',
+    '.profile-menu-head{display:flex;justify-content:space-between;align-items:center;padding:6px 10px 8px;border-bottom:1px solid var(--border-muted,#21262d);margin-bottom:4px}',
+    '.profile-menu-head span{font-size:11px;color:var(--fg-subtle,#8b949e);text-transform:uppercase;letter-spacing:.08em}',
+    '.profile-menu-head button{background:none;border:none;color:var(--accent-fg,#58a6ff);cursor:pointer;font-size:11.5px;padding:3px 8px;border-radius:4px;transition:background .12s}',
+    '.profile-menu-head button:hover{background:var(--canvas-subtle,#21262d)}',
+    '.profile-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;color:var(--fg-default,#e6edf3);transition:background .12s}',
+    '.profile-item:hover{background:var(--canvas-subtle,#21262d)}',
+    '.profile-item.active{background:rgba(31,111,235,.14)}',
+    '.profile-item .icon{width:14px;height:14px;color:var(--fg-muted,#8b949e);flex-shrink:0}',
+    '.profile-item.active .icon{color:var(--accent-fg,#58a6ff)}',
+    '.profile-item-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}',
+    '.profile-item-name{font-size:13px;font-weight:500;color:var(--fg-default,#e6edf3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.profile-item-model{font-family:var(--font-mono,monospace);font-size:11px;color:var(--fg-subtle,#8b949e);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.profile-empty{padding:16px 10px;text-align:center;color:var(--fg-subtle,#8b949e);font-size:12px}',
+    '.profile-section{margin-bottom:14px;padding:10px;border:1px solid var(--border-default,#30363d);border-radius:8px;background:var(--canvas-subtle,#161b22)}',
+    '.profile-section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}',
+    '.profile-section-title{font-size:12px;font-weight:600;color:var(--fg-default,#e6edf3);letter-spacing:.02em}',
+    '.profile-list{display:flex;flex-direction:column;gap:6px}',
+    '.profile-section-foot{margin-top:8px;display:flex;justify-content:flex-end}',
+    '.profile-new{display:inline-flex;align-items:center;gap:5px;background:var(--canvas-default,#0d1117);border:1px dashed var(--border-default,#30363d);color:var(--accent-fg,#58a6ff);padding:5px 11px;border-radius:6px;cursor:pointer;font-size:12px;transition:border-color .15s,background .15s}',
+    '.profile-new:hover{border-color:var(--accent-emphasis,#1f6feb);background:var(--canvas-subtle,#21262d)}',
+    '.profile-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border-muted,#21262d);border-radius:6px;background:var(--canvas-default,#0d1117);transition:border-color .15s,background .15s}',
+    '.profile-row:hover{border-color:var(--border-default,#30363d)}',
+    '.profile-row.active{border-color:var(--accent-emphasis,#1f6feb);background:rgba(31,111,235,.08)}',
+    '.profile-row.editing{border-color:var(--attention-fg,#d29922);background:rgba(210,153,34,.08)}',
+    '.profile-row .icon{width:14px;height:14px;color:var(--fg-muted,#8b949e);flex-shrink:0}',
+    '.profile-row.active .icon{color:var(--accent-fg,#58a6ff)}',
+    '.profile-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}',
+    '.profile-row-name{font-size:12.5px;font-weight:500;color:var(--fg-default,#e6edf3);display:flex;align-items:center;gap:6px;overflow:hidden}',
+    '.profile-row-name > span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.profile-row-meta{font-family:var(--font-mono,monospace);font-size:10.5px;color:var(--fg-subtle,#8b949e);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.profile-row-badge{font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(31,111,235,.15);color:var(--accent-fg,#58a6ff);border:1px solid var(--accent-emphasis,#1f6feb);white-space:nowrap;flex-shrink:0;font-weight:500}',
+    '.profile-row-badge.edit{background:rgba(210,153,34,.15);color:var(--attention-fg,#d29922);border-color:var(--attention-fg,#d29922)}',
+    '.profile-row-btn{background:var(--canvas-default,#0d1117);border:1px solid var(--border-default,#30363d);color:var(--fg-default,#e6edf3);padding:3px 9px;border-radius:5px;cursor:pointer;font-size:11px;white-space:nowrap;transition:border-color .15s,color .15s,background .15s}',
+    '.profile-row-btn:hover{border-color:var(--accent-emphasis,#1f6feb);color:var(--accent-fg,#58a6ff);background:var(--canvas-subtle,#21262d)}',
+    '.profile-row-btn:disabled{opacity:.5;cursor:default}',
+    '.profile-row-btn:disabled:hover{border-color:var(--border-default,#30363d);color:var(--fg-default,#e6edf3);background:var(--canvas-default,#0d1117)}',
+    '.profile-row-btn.danger:hover{border-color:var(--danger-fg,#f85149);color:var(--danger-fg,#f85149)}',
+    '.profile-row-btn.primary{border-color:var(--accent-emphasis,#1f6feb);color:var(--accent-fg,#58a6ff)}'
+  ].join('\n');
+  document.head.appendChild(s);
+})();
+
+let profileMenuEl = null;
+
+function onDocClickForProfile(e){
+  if (!profileMenuEl) return;
+  if (profileMenuEl.contains(e.target)) return;
+  if (el.chipModel.contains(e.target)) return;
+  closeProfileMenu();
+}
+
+function closeProfileMenu(){
+  if (profileMenuEl){
+    profileMenuEl.remove();
+    profileMenuEl = null;
+    document.removeEventListener('mousedown', onDocClickForProfile, true);
+    window.removeEventListener('resize', closeProfileMenu);
+  }
+}
+
+function activateProfile(id){
+  const p = (state.config.profiles || []).find(x => x.id === id);
+  if (!p) return;
+
+  state.config.activeProfileId = id;
+  state.config.model = p.model || '';
+  state.config.baseUrl = p.baseUrl || '';
+  state.config.hasKey = !!p.hasKey;
+  el.modelLabel.textContent = p.model || '未配置';
+
+  fetch('/api/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ activeProfileId: id }),
+  }).catch(() => {});
+
+  if (el.drawer && el.drawer.classList.contains('on')){
+    editingProfileId = null;
+    loadConfigToUI();
+  }
+}
+
+function openProfileMenu(){
+  closeProfileMenu();
+
+  const profiles = state.config.profiles || [];
+  if (!profiles.length){
+    toast('暂无可用配置，请到设置中添加', 'info', 2200);
+    return;
+  }
+
+  const menu = document.createElement('div');
+  menu.className = 'profile-menu';
+
+  let html = '<div class="profile-menu-head">' +
+    '<span>选择模型配置</span>' +
+    '<button data-act="manage" type="button">管理</button>' +
+  '</div>';
+
+  profiles.forEach(p => {
+    const isActive = p.id === state.config.activeProfileId;
+    html += '<div class="profile-item' + (isActive ? ' active' : '') + '" data-pid="' + esc(p.id) + '">' +
+      icon(isActive ? 'i-check' : 'i-chip') +
+      '<div class="profile-item-main">' +
+        '<span class="profile-item-name">' + esc(p.name || '未命名配置') + '</span>' +
+        '<span class="profile-item-model">' + esc(p.model || '未设置模型') + '</span>' +
+      '</div>' +
+    '</div>';
+  });
+
+  menu.innerHTML = html;
+
+  menu.querySelectorAll('.profile-item').forEach(node => {
+    node.addEventListener('click', () => {
+      const id = node.dataset.pid;
+      const p = (state.config.profiles || []).find(x => x.id === id);
+      activateProfile(id);
+      closeProfileMenu();
+      if (p) toast('已切换到：' + (p.name || '未命名配置'), 'success', 1600);
+    });
+  });
+
+  const manageBtn = menu.querySelector('[data-act="manage"]');
+  if (manageBtn){
+    manageBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeProfileMenu();
+      openDrawer();
+      setTimeout(() => {
+        const tab = el.drawer.querySelector('[data-tab="model"]');
+        if (tab) tab.click();
+      }, 120);
+    });
+  }
+
+  document.body.appendChild(menu);
+  profileMenuEl = menu;
+
+  const rect = el.chipModel.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+  const left = Math.max(8, Math.min(rect.left, window.innerWidth - menuRect.width - 8));
+  const top = Math.min(rect.bottom + 6, window.innerHeight - menuRect.height - 8);
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
+
   setTimeout(() => {
-    el.drawer.querySelector('[data-tab="model"]').click();
-  }, 120);
+    document.addEventListener('mousedown', onDocClickForProfile, true);
+  }, 0);
+  window.addEventListener('resize', closeProfileMenu);
+}
+
+el.chipModel.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (profileMenuEl) closeProfileMenu();
+  else openProfileMenu();
 });
 
+function renderProfileManager(){
+  const pane = el.drawer.querySelector('[data-pane="model"]');
+  if (!pane) return;
+
+  let section = pane.querySelector('.profile-section');
+  if (!section){
+    section = document.createElement('div');
+    section.className = 'profile-section';
+    if (pane.firstChild) pane.insertBefore(section, pane.firstChild);
+    else pane.appendChild(section);
+  }
+
+  const profiles = state.config.profiles || [];
+  const activeId = state.config.activeProfileId;
+
+  let html = '<div class="profile-section-head">' +
+    '<span class="profile-section-title">模型配置（' + profiles.length + '）</span>' +
+  '</div>';
+
+  if (!profiles.length){
+    html += '<div class="profile-empty">暂无配置，点击下方「+ 新建配置」开始</div>';
+  } else {
+    html += '<div class="profile-list">';
+    profiles.forEach(p => {
+      const isActive = p.id === activeId;
+      const isEditing = p.id === editingProfileId;
+      const cls = 'profile-row' +
+        (isActive ? ' active' : '') +
+        (isEditing ? ' editing' : '');
+      const metaParts = [];
+      metaParts.push(p.model ? esc(p.model) : '未设置模型');
+      if (p.baseUrl) metaParts.push(esc(p.baseUrl));
+      html += '<div class="' + cls + '" data-pid="' + esc(p.id) + '">' +
+        icon(isActive ? 'i-check' : 'i-chip') +
+        '<div class="profile-row-main">' +
+          '<span class="profile-row-name"><span>' + esc(p.name || '未命名配置') + '</span>' +
+            (isActive ? '<span class="profile-row-badge">当前</span>' : '') +
+            (isEditing ? '<span class="profile-row-badge edit">编辑中</span>' : '') +
+          '</span>' +
+          '<span class="profile-row-meta">' + metaParts.join(' · ') + '</span>' +
+        '</div>' +
+        '<button class="profile-row-btn" data-edit="' + esc(p.id) + '" type="button">编辑</button>' +
+        '<button class="profile-row-btn primary" data-activate="' + esc(p.id) + '" type="button"' +
+          (isActive ? ' disabled' : '') + '>' + (isActive ? '已激活' : '激活') + '</button>' +
+        '<button class="profile-row-btn danger" data-del="' + esc(p.id) + '" type="button">删除</button>' +
+      '</div>';
+    });
+    html += '</div>';
+  }
+
+  html += '<div class="profile-section-foot">' +
+    '<button class="profile-new" data-act="new" type="button">' +
+      icon('i-plus', 'icon-sm') + '新建配置' +
+    '</button>' +
+  '</div>';
+
+  section.innerHTML = html;
+
+  const newBtn = section.querySelector('[data-act="new"]');
+  if (newBtn){
+    newBtn.addEventListener('click', () => {
+      if (!Array.isArray(state.config.profiles)) state.config.profiles = [];
+      const id = 'p-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+      const count = state.config.profiles.length + 1;
+      state.config.profiles.push({
+        id: id,
+        name: '新配置 ' + count,
+        hasKey: false,
+        baseUrl: '',
+        model: '',
+      });
+      editingProfileId = id;
+      if ($('cfgModel')) $('cfgModel').value = '';
+      if ($('cfgBaseUrl')) $('cfgBaseUrl').value = '';
+      if ($('cfgApiKey')){
+        $('cfgApiKey').value = '';
+        $('cfgApiKey').placeholder = 'sk-...';
+      }
+      renderProfileManager();
+      toast('已创建新配置，填写下方表单后点保存', 'info', 2200);
+    });
+  }
+
+  section.querySelectorAll('[data-edit]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.edit;
+      const p = (state.config.profiles || []).find(x => x.id === id);
+      if (!p) return;
+      editingProfileId = id;
+      if ($('cfgModel')) $('cfgModel').value = p.model || '';
+      if ($('cfgBaseUrl')) $('cfgBaseUrl').value = p.baseUrl || '';
+      if ($('cfgApiKey')){
+        $('cfgApiKey').value = '';
+        $('cfgApiKey').placeholder = p.hasKey ? '已保存（留空则保持不变）' : 'sk-...';
+      }
+      renderProfileManager();
+      if ($('cfgModel')){
+        try { $('cfgModel').focus(); } catch(e){}
+      }
+    });
+  });
+
+  section.querySelectorAll('[data-activate]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.activate;
+      editingProfileId = null;
+      activateProfile(id);
+      toast('已激活配置', 'success', 1600);
+    });
+  });
+
+  section.querySelectorAll('[data-del]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.del;
+      const profiles = state.config.profiles || [];
+      if (profiles.length <= 1){
+        toast('至少保留一个配置', 'warn');
+        return;
+      }
+
+      toast('o(^▽^)o 请点击确认', 'info', 2000);
+
+      setTimeout(() => {
+        if (!confirm('确定删除该配置？')) return;
+
+        const idx = profiles.findIndex(x => x.id === id);
+        if (idx === -1) return;
+        const wasActive = state.config.activeProfileId === id;
+        profiles.splice(idx, 1);
+
+        if (wasActive){
+          const next = profiles[0];
+          if (next) activateProfile(next.id);
+        }
+        if (editingProfileId === id) editingProfileId = null;
+        renderProfileManager();
+        if (el.drawer.classList.contains('on')) loadConfigToUI();
+        toast('已删除配置', 'info', 1600);
+      }, 120);
+    });
+  });
+}
+
 /* ------------------------------------------------------------
-   22. 余额
+   19. 余额
    ------------------------------------------------------------ */
 function refreshBalance(){
   fetch('/api/balance')
@@ -2451,7 +3456,7 @@ function showBalance(data){
 el.chipBalance.addEventListener('click', refreshBalance);
 
 /* ------------------------------------------------------------
-   23. 审批弹窗
+   20. 审批弹窗
    ------------------------------------------------------------ */
 let pendingApprovalId = null;
 
@@ -2538,7 +3543,7 @@ function closeApproval(){
 }
 
 /* ------------------------------------------------------------
-   24. 命令面板
+   21. 命令面板
    ------------------------------------------------------------ */
 function buildCommands(){
   return [
@@ -2725,7 +3730,7 @@ el.cmdk.addEventListener('mousedown', e => {
 el.btnCmd.addEventListener('click', openCmdk);
 
 /* ------------------------------------------------------------
-   25. 查找
+   22. 查找
    ------------------------------------------------------------ */
 function openFind(){
   el.findBar.hidden = false;
@@ -2805,13 +3810,13 @@ el.findInput.addEventListener('keydown', e => {
 el.btnFind.addEventListener('click', openFind);
 
 /* ------------------------------------------------------------
-   26. 导入导出
+   23. 导入导出
    ------------------------------------------------------------ */
 function exportAll(){
   persistSession();
   const payload = {
     app: 'helix',
-    version: '0.4.0',
+    version: '0.5.0',
     exportedAt: new Date().toISOString(),
     sessions: state.sessions,
   };
@@ -2867,7 +3872,7 @@ el.btnWipe.addEventListener('click', () => {
 el.sessionFilter.addEventListener('input', debounce(renderSessionList, 120));
 
 /* ------------------------------------------------------------
-   27. 右键菜单
+   24. 右键菜单
    ------------------------------------------------------------ */
 function showCtx(x, y, items){
   el.ctxMenu.innerHTML = items.map((it, i) =>
@@ -2924,7 +3929,7 @@ document.addEventListener('contextmenu', e => {
 });
 
 /* ------------------------------------------------------------
-   28. 快捷键
+   25. 快捷键
    ------------------------------------------------------------ */
 function renderShortcuts(){
   el.kbdList.innerHTML = SHORTCUTS.map(([label, keys]) =>
@@ -2940,13 +3945,14 @@ document.addEventListener('keydown', e => {
   const inInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
 
   if (e.key === 'Escape'){
+    if (document.getElementById('helixUnsavedDialog')){ hideUnsavedDialog(); return; }
+    if (profileMenuEl){ closeProfileMenu(); return; }
     if (!el.cmdk.hidden){ closeCmdk(); return; }
     if (!el.approvalModal.hidden){ return; }
     if (!el.findBar.hidden){ closeFind(); return; }
     if (el.drawer.classList.contains('on')){ closeDrawer(); return; }
     if (el.sidebar.classList.contains('open')){ closeSidebar(); return; }
     if (!el.ctxMenu.hidden){ hideCtx(); return; }
-    if (state.streaming){ /* 不打断 */ }
     return;
   }
 
@@ -2976,7 +3982,7 @@ document.addEventListener('keydown', e => {
 });
 
 /* ------------------------------------------------------------
-   29. 品牌按钮 / 主题
+   26. 品牌按钮 / 主题
    ------------------------------------------------------------ */
 el.brandBtn.addEventListener('click', () => {
   if (state.messages.length){
@@ -2994,7 +4000,7 @@ el.brandBtn.addEventListener('keydown', e => {
 el.btnTheme.addEventListener('click', toggleTheme);
 
 /* ------------------------------------------------------------
-   30. Token 估算
+   27. Token 估算
    ------------------------------------------------------------ */
 setInterval(() => {
   const chars = state.messages.reduce((sum, m) =>
@@ -3006,7 +4012,7 @@ setInterval(() => {
 }, 2000);
 
 /* ------------------------------------------------------------
-   31. 系统主题跟随
+   28. 系统主题跟随
    ------------------------------------------------------------ */
 (function watchSystemTheme(){
   if (!window.matchMedia) return;
@@ -3023,7 +4029,7 @@ setInterval(() => {
 })();
 
 /* ------------------------------------------------------------
-   32. 窗口尺寸变化
+   29. 窗口尺寸变化
    ------------------------------------------------------------ */
 window.addEventListener('resize', debounce(() => {
   if (window.innerWidth > 900){
@@ -3034,6 +4040,333 @@ window.addEventListener('resize', debounce(() => {
     if (state.previewOpen) openScrim();
   }
 }, 150));
+
+/* ------------------------------------------------------------
+   30. WebSocket
+   ------------------------------------------------------------ */
+function connect(){
+  if (state.socket && (state.socket.readyState === WebSocket.OPEN ||
+                       state.socket.readyState === WebSocket.CONNECTING)) return;
+
+  const params = new URLSearchParams(location.search);
+  const token = params.get('token') || '';
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+  if (!location.host || location.protocol === 'file:'){
+    enterOfflineMode('本地文件模式');
+    return;
+  }
+
+  setConn('pending', '连接中');
+
+  let socket;
+  try {
+    socket = new WebSocket(proto + '//' + location.host + '/ws?token=' + encodeURIComponent(token));
+  } catch (e){
+    enterOfflineMode('无法建立连接');
+    return;
+  }
+  state.socket = socket;
+
+  socket.addEventListener('open', () => {
+    state.connected = true;
+    state.offline = false;
+    state.reconnectAttempts = 0;
+    setConn('ok', '已连接');
+  });
+
+  socket.addEventListener('close', ev => {
+    state.connected = false;
+    if (ev.code === 4001 || ev.code === 4003){
+      setConn('err', '未授权');
+      return;
+    }
+    setConn('err', '已断开');
+    scheduleReconnect();
+  });
+
+  socket.addEventListener('error', () => {
+    if (!state.connected) enterOfflineMode('连接失败');
+  });
+
+  socket.addEventListener('message', ev => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch(e){ return; }
+    handleServerMessage(msg);
+  });
+}
+
+function scheduleReconnect(){
+  if (state.offline) return;
+  clearTimeout(state.reconnectTimer);
+  const delay = Math.min(1500 * Math.pow(1.6, state.reconnectAttempts++), 20000);
+  state.reconnectTimer = setTimeout(() => {
+    if (!state.connected && !state.offline) connect();
+  }, delay);
+}
+
+function enterOfflineMode(reason){
+  if (state.offline) return;
+  state.offline = true;
+  state.connected = false;
+  setConn('pending', '离线演示');
+  toast(reason + '，已切换为离线演示模式', 'warn', 3600);
+}
+
+function setConn(cls, text){
+  el.connPill.className = 'conn-pill ' + cls;
+  el.connLabel.textContent = text;
+}
+
+function sendSocket(payload){
+  if (!state.socket || state.socket.readyState !== WebSocket.OPEN) return false;
+  state.socket.send(JSON.stringify(payload));
+  return true;
+}
+
+function handleServerMessage(m){
+  switch (m.type){
+    case 'ready':
+      if (m.model) { state.config.model = m.model; el.modelLabel.textContent = m.model; }
+      if (m.workspace) state.config.workspace = m.workspace;
+      if (typeof m.useAiTitle === 'boolean') state.config.useAiTitle = m.useAiTitle;
+
+      if (m.activeProfileId) state.config.activeProfileId = m.activeProfileId;
+      if (Array.isArray(m.profiles)) state.config.profiles = m.profiles;
+      if (state.config.profiles && state.config.profiles.length){
+        let active = state.config.profiles.find(x => x.id === state.config.activeProfileId);
+        if (!active) active = state.config.profiles[0];
+        if (!state.config.activeProfileId) state.config.activeProfileId = active.id;
+        if (active){
+          state.config.model = active.model || state.config.model;
+          state.config.baseUrl = active.baseUrl || state.config.baseUrl;
+          state.config.hasKey = !!active.hasKey;
+          el.modelLabel.textContent = state.config.model || '未配置';
+        }
+      }
+
+      state.config.terminalSkin = detectTerminalSkin(m.platform, m.osRelease);
+      reapplyTerminalSkin();
+      break;
+    case 'assistant_delta':
+      appendDelta(m.text);
+      break;
+    case 'reasoning_delta':
+      appendReasoning(m.text);
+      break;
+    case 'tool_start':
+      onToolStart(m);
+      break;
+    case 'tool_end':
+      onToolEnd(m);
+      break;
+    case 'approval_request':
+      showApproval(m);
+      break;
+    case 'preview':
+      showPreview(m.html);
+      break;
+    case 'balance':
+      showBalance(m);
+      break;
+    case 'done':
+      finishStream();
+      break;
+    case 'title_update':
+      updateSessionTitle(m.sessionId, m.title);
+      break;
+    case 'terminal_output':
+      onTerminalOutput(m);
+      break;
+    case 'error':
+      onStreamError(m.message || '发生未知错误');
+      break;
+  }
+}
+
+/* ------------------------------------------------------------
+   31. 语音
+   ------------------------------------------------------------ */
+let speakingUtterance = null;
+
+function speak(text){
+  if (!('speechSynthesis' in window)){
+    toast('当前浏览器不支持语音朗读', 'warn');
+    return;
+  }
+  const synth = window.speechSynthesis;
+  if (synth.speaking){
+    synth.cancel();
+    return;
+  }
+  const clean = String(text)
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`[^`]*`/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/[#>*_~\-]{1,}/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!clean) return;
+
+  const u = new SpeechSynthesisUtterance(clean.slice(0, 4000));
+  u.lang = 'zh-CN';
+  u.rate = 1.05;
+  u.pitch = 1;
+  u.onend = () => { speakingUtterance = null; };
+  u.onerror = () => { speakingUtterance = null; };
+  speakingUtterance = u;
+  synth.speak(u);
+}
+
+/* ------------------------------------------------------------
+   32. 消息操作 / 空状态
+   ------------------------------------------------------------ */
+function bindMessageActions(node){
+  node.querySelectorAll('[data-act]').forEach(btn => {
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', () => handleMessageAction(btn.dataset.act, btn.dataset.id));
+  });
+}
+
+function bindCodeCopy(root){
+  root.querySelectorAll('[data-copy]').forEach(btn => {
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', () => {
+      const pre = btn.closest('.code-block').querySelector('pre code');
+      if (!pre) return;
+      copyText(pre.textContent);
+      const old = btn.innerHTML;
+      btn.innerHTML = icon('i-check', 'icon-sm') + '已复制';
+      setTimeout(() => { btn.innerHTML = old; }, 1400);
+    });
+  });
+}
+
+function bindToolToggle(root){
+  root.querySelectorAll('.tool-head').forEach(head => {
+    if (head.dataset.bound) return;
+    head.dataset.bound = '1';
+    head.addEventListener('click', () => {
+      head.closest('.tool-card').classList.toggle('collapsed');
+    });
+  });
+}
+
+function bindReasoningToggle(root){
+  root.querySelectorAll('.reasoning-head').forEach(head => {
+    if (head.dataset.bound) return;
+    head.dataset.bound = '1';
+    head.addEventListener('click', () => {
+      head.closest('.reasoning').classList.toggle('collapsed');
+    });
+  });
+}
+
+function handleMessageAction(action, id){
+  const msg = state.messages.find(m => m.id === id);
+  if (!msg) return;
+
+  switch (action){
+    case 'copy':
+      copyText(msg.text).then(() => toast('已复制到剪贴板', 'success', 1500));
+      break;
+    case 'speak':
+      speak(msg.text);
+      break;
+    case 'regen':
+      regenerate();
+      break;
+    case 'edit':
+      el.promptInput.value = msg.text;
+      el.promptInput.focus();
+      autoResize();
+      break;
+    case 'retry':
+      resend(msg);
+      break;
+    case 'del':
+      removeMessage(id);
+      break;
+  }
+}
+
+function removeMessage(id){
+  const idx = state.messages.findIndex(m => m.id === id);
+  if (idx === -1) return;
+  state.messages.splice(idx, 1);
+  const node = state.nodes.get(id);
+  if (node) node.remove();
+  state.nodes.delete(id);
+  persistSession();
+  if (!state.messages.length) renderEmptyState();
+  toast('已删除消息', 'info', 1500);
+}
+
+const SUGGESTIONS = [
+  { ico: 'i-folder', t: '浏览当前目录', d: '看看工作目录里有哪些文件', q: '帮我列出当前工作目录下的文件结构' },
+  { ico: 'i-code', t: '写一段快速排序', d: 'Python 实现，带中文注释', q: '用 Python 写一个快速排序，加上详细的中文注释' },
+  { ico: 'i-terminal', t: '检查环境版本', d: '执行命令查看 Node 版本', q: '执行命令看一下当前环境里的 Node 和 npm 版本' },
+  { ico: 'i-sparkle', t: '画个预览图', d: '在预览面板渲染 HTML', q: '在预览面板渲染一个居中的渐变圆形，带轻微呼吸动画' },
+  { ico: 'i-book', t: '读一下 README', d: '总结项目在做什么', q: '读一下 README.md，用三句话总结这个项目' },
+  { ico: 'i-globe', t: '查最新版本', d: '搜索某个工具的最新版', q: '搜索一下 Vite 当前最新的稳定版本号' },
+  { ico: 'i-branch', t: '解释这段代码', d: '逐行说明它在做什么', q: '我贴一段代码给你，帮我逐行解释它在做什么，说人话' },
+  { ico: 'i-shield', t: '审查安全风险', d: '检查依赖与配置', q: '帮我检查这个项目的依赖里有没有已知的安全风险' },
+];
+
+function renderEmptyState(){
+  el.stream.innerHTML =
+    '<div class="empty">' +
+      '<svg class="empty-mark" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+        '<defs>' +
+          '<linearGradient id="emA" x1="18" y1="6" x2="46" y2="58" gradientUnits="userSpaceOnUse">' +
+            '<stop stop-color="#1f6feb"/><stop offset="1" stop-color="#a371f7"/>' +
+          '</linearGradient>' +
+          '<linearGradient id="emB" x1="46" y1="6" x2="18" y2="58" gradientUnits="userSpaceOnUse">' +
+            '<stop stop-color="#58a6ff"/><stop offset="1" stop-color="#d2a8ff"/>' +
+          '</linearGradient>' +
+        '</defs>' +
+        '<path d="M32 7C18.5 7 18.5 24 32 24s13.5 17 0 17-13.5 17 0 17" ' +
+          'stroke="url(#emA)" stroke-width="6.2" stroke-linecap="round" opacity=".5"/>' +
+        '<path d="M32 7c13.5 0 13.5 17 0 17S18.5 41 32 41s13.5 17 0 17" ' +
+          'stroke="url(#emB)" stroke-width="6.2" stroke-linecap="round"/>' +
+      '</svg>' +
+      '<h1>今天想让 Helix 做什么？</h1>' +
+      '<p>本地优先的 AI Agent 工作台 · 会话数据只存在你的浏览器里</p>' +
+      '<div class="empty-tags">' +
+        '<span class="empty-tag">文件读写</span>' +
+        '<span class="empty-tag">命令执行</span>' +
+        '<span class="empty-tag">网页搜索</span>' +
+        '<span class="empty-tag">HTML 预览</span>' +
+        '<span class="empty-tag">多轮推理</span>' +
+      '</div>' +
+      '<div class="suggest-grid">' +
+        SUGGESTIONS.map(s =>
+          '<button class="suggest" data-q="' + esc(s.q) + '">' +
+            '<span class="suggest-ico">' + icon(s.ico) + '</span>' +
+            '<span class="suggest-txt">' +
+              '<span class="suggest-t">' + esc(s.t) + '</span>' +
+              '<span class="suggest-d">' + esc(s.d) + '</span>' +
+            '</span>' +
+          '</button>'
+        ).join('') +
+      '</div>' +
+    '</div>';
+
+  el.stream.querySelectorAll('.suggest').forEach(btn => {
+    btn.addEventListener('click', () => {
+      el.promptInput.value = btn.dataset.q;
+      el.promptInput.focus();
+      autoResize();
+    });
+  });
+}
+
+function clearEmptyState(){
+  const node = el.stream.querySelector('.empty');
+  if (node) node.remove();
+}
 
 /* ------------------------------------------------------------
    33. 启动
@@ -3079,10 +4412,21 @@ function boot(){
 
   el.modelLabel.textContent = state.config.model || '未配置';
 
+  injectInlineTermStyle();
+
+  fetch('/api/config').then(r => r.json()).then(cfg => {
+    if (cfg && typeof cfg === 'object') {
+      Object.assign(state.config, cfg);
+      if (state.config.model) el.modelLabel.textContent = state.config.model;
+      ensureAiTitleOption();
+      const aiTitleEl = $('cfgUseAiTitle');
+      if (aiTitleEl) aiTitleEl.checked = state.config.useAiTitle || false;
+    }
+  }).catch(() => {});
+
   connect();
   refreshBalance();
 
-  /* 恢复未完成的任务（刷新前发出的消息） */
   restorePendingTask();
 
   if (window.innerWidth <= 900){
@@ -3100,6 +4444,10 @@ window.Helix = {
   newSession: newSession,
   exportAll: exportAll,
   openCmdk: openCmdk,
+  openProfileMenu: openProfileMenu,
+  activateProfile: activateProfile,
+  findToolByCallId: findToolByCallId,
+  detectTerminalSkin: detectTerminalSkin,
 };
 
 if (document.readyState === 'loading'){

@@ -34,6 +34,74 @@ function sendError(ws, message, code) {
   sendJson(ws, { type: 'error', message: message, code: code || 'UNKNOWN' });
 }
 
+// 请求模型生成 4-8 字标题，静默更新会话并推给前端
+async function generateAiTitle(ws, sessionId, history, config) {
+  if (!sessionId || !Array.isArray(history) || history.length === 0) return;
+
+  // 取第一轮用户输入（history[0] 是 system，[1] 通常是第一条 user）
+  let firstUserText = '';
+  for (const m of history) {
+    if (m && m.role === 'user' && typeof m.content === 'string' && m.content.trim()) {
+      firstUserText = m.content;
+      break;
+    }
+  }
+  if (!firstUserText) return;
+
+  // 取最后一条 assistant 文本（避免最后一条是 tool 消息）
+  let lastAssistantText = '';
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i];
+    if (m && m.role === 'assistant' && typeof m.content === 'string' && m.content.trim()) {
+      lastAssistantText = m.content;
+      break;
+    }
+  }
+  if (!lastAssistantText) return;
+
+  const messages = [
+    {
+      role: 'system',
+      content: '你是一个标题生成器。请用4-8个字总结这段对话的主题。只输出标题本身，不要标点、不要解释。',
+    },
+    {
+      role: 'user',
+      content: '用户: ' + firstUserText + '\nAI: ' + lastAssistantText,
+    },
+  ];
+
+  let raw = '';
+  await streamChat({
+    config: config,
+    messages: messages,
+    tools: [],
+    signal: new AbortController().signal,
+    onDelta: function (chunk) {
+      raw += chunk;
+    },
+  });
+
+  let title = String(raw || '')
+    .trim()
+    .replace(/^[\s"'“”‘’《》「」【】.,!?;:。，！？；：、·\-—]+/, '')
+    .replace(/[\s"'“”‘’《》「」【】.,!?;:。，！？；：、·\-—]+$/, '')
+    .trim();
+
+  if (!title) return;
+
+  try {
+    if (typeof session.updateSessionTitle === 'function') {
+      await session.updateSessionTitle(sessionId, title);
+    } else {
+      console.warn('[title] session.js 未导出 updateSessionTitle，跳过标题持久化');
+    }
+  } catch (e) {
+    console.error('[title] 保存会话标题失败：', e.message);
+  }
+
+  sendJson(ws, { type: 'title_update', sessionId: sessionId, title: title });
+}
+
 export function startServer(options) {
   const port = options.port;
   const token = options.token;
@@ -89,14 +157,14 @@ export function startServer(options) {
       catch (err) { res.status(500).json({ error: err.message }); }
     });
 
-    app.get('/api/session/load/:name', async function (req, res) {
-      try { res.json(await session.loadSession(req.params.name)); }
+    app.get('/api/session/load/:id', async function (req, res) {
+      try { res.json(await session.loadSession(req.params.id)); }
       catch (err) { res.status(404).json({ error: err.message }); }
     });
 
-    app.post('/api/session/delete/:name', async function (req, res) {
+    app.post('/api/session/delete/:id', async function (req, res) {
       try {
-        await session.deleteSession(req.params.name);
+        await session.deleteSession(req.params.id);
         res.json({ ok: true });
       } catch (err) { res.status(500).json({ error: err.message }); }
     });
@@ -149,16 +217,29 @@ export function startServer(options) {
         type: 'ready',
         model: config.model || null,
         workspace: config.workspace || null,
+        activeProfileId: config.activeProfileId || null,
+        profiles: config.profiles || [],
+        useAiTitle: config.useAiTitle || false,
       });
 
       const history = [];
       let currentAbort = null;
+      let currentSessionId = null;
       const alwaysAllowed = new Set();
 
-      async function handleUserMessage(text, wireHistory, clientMsgId) {
+      async function handleUserMessage(text, wireHistory, clientMsgId, sessionId, useAiTitle) {
         if (currentAbort) {
           sendError(ws, '上一条还没回答完，请先等一会儿', 'BUSY');
           return;
+        }
+
+        // 会话 ID：前端传了就沿用；没传就立刻新建一个并告知前端
+        if (sessionId) {
+          currentSessionId = sessionId;
+        } else {
+          const newSession = await session.createSession();
+          currentSessionId = newSession.id;
+          sendJson(ws, { type: 'session_id', id: currentSessionId });
         }
 
         const freshConfig = await loadConfig();
@@ -287,7 +368,14 @@ export function startServer(options) {
                 status: 'running', result: '',
               });
 
-              const toolResult = await executeTool(tc.name, args, toolContext);
+              // 为当前工具派生专属 Context，把 tc.id 作为 callId 透传给前端
+              const currentToolContext = {
+                ...toolContext,
+                onTerminalData: function (text) {
+                  sendJson(ws, { type: 'terminal_output', callId: tc.id, text: text });
+                }
+              };
+              const toolResult = await executeTool(tc.name, args, currentToolContext);
               const ok = toolResult.ok;
               const rtext = toolResult.result;
 
@@ -310,11 +398,19 @@ export function startServer(options) {
             }
           }
 
-          try { await session.saveSession(history); }
+          try { await session.saveSession(currentSessionId, history); }
           catch (e) { console.error('[session] 保存失败：', e.message); }
 
           sendJson(ws, { type: 'done', reason: 'complete' });
           if (task) tasks.finishTask(clientMsgId, 'complete');
+
+          // 首轮对话 + 用户开启 AI 标题 => 后台静默生成标题，不阻塞 done
+          const userTurns = history.filter(function (m) {
+            return m && m.role === 'user';
+          }).length;
+          if (useAiTitle && userTurns === 1 && currentSessionId) {
+            generateAiTitle(ws, currentSessionId, history, freshConfig).catch(console.error);
+          }
         } catch (err) {
           if (err.code === 'ABORTED') {
             sendJson(ws, { type: 'done', reason: 'aborted' });
@@ -338,7 +434,9 @@ export function startServer(options) {
           await handleUserMessage(
             String(msg.text || ''),
             msg.history,
-            msg.clientMsgId
+            msg.clientMsgId,
+            msg.sessionId,
+            msg.useAiTitle === true
           );
         } else if (msg.type === 'approval') {
           resolveApproval(msg.requestId, msg.decision, msg.answer);

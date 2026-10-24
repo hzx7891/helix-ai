@@ -16,8 +16,10 @@
 //   - 字节级截断（不是字符级，中文一个字符三字节）
 //   - 友好的错误翻译（ENOENT 不说 "ENOENT"，说"命令不存在"）
 //   - 平台识别（Termux / Windows / Linux / macOS）
+//   - 流式输出（每个 chunk 实时推送，用 StringDecoder 防止中文跨 chunk 乱码）
 
 import { spawn } from 'node:child_process';
+import { StringDecoder } from 'node:string_decoder';
 
 // ---------------------------------------------------------------
 // 常量
@@ -252,6 +254,12 @@ export async function run_command(args, context) {
   const timeoutSec = clampTimeout(context?.config?.cmdTimeout);
   const env = buildSafeEnv();
 
+  // 把上层传进来的流式回调抓出来。
+  // server/index.js 在建立连接时已经把 `onTerminalData` 挂在 context 上了，
+  // 这里只负责转发给底层 runProcess，让每个 chunk 实时推给前端。
+  const onStreamData =
+    typeof context?.onTerminalData === 'function' ? context.onTerminalData : null;
+
   const startedAt = Date.now();
 
   const result = await runProcess({
@@ -260,6 +268,7 @@ export async function run_command(args, context) {
     cwd: workspace,
     env,
     timeoutMs: timeoutSec * 1000,
+    onStreamData,
   });
 
   const durationMs = Date.now() - startedAt;
@@ -311,7 +320,7 @@ export async function run_command(args, context) {
 // 底层：跑进程
 // ---------------------------------------------------------------
 
-function runProcess({ command, args, cwd, env, timeoutMs }) {
+function runProcess({ command, args, cwd, env, timeoutMs, onStreamData }) {
   return new Promise((resolve) => {
     let child;
     try {
@@ -333,6 +342,13 @@ function runProcess({ command, args, cwd, env, timeoutMs }) {
       });
       return;
     }
+
+    // 流式输出用 StringDecoder：
+    // 多字节 UTF-8 字符（中文、emoji）可能被切在两个 chunk 之间，
+    // 直接 chunk.toString('utf-8') 会变成替换字符。
+    // StringDecoder 会缓存不完整的字节，等下一个 chunk 拼齐再输出。
+    const stdoutDecoder = new StringDecoder('utf-8');
+    const stderrDecoder = new StringDecoder('utf-8');
 
     let output = '';
     let outputBytes = 0;
@@ -360,8 +376,26 @@ function runProcess({ command, args, cwd, env, timeoutMs }) {
       outputBytes += size;
     }
 
-    child.stdout?.on('data', collect);
-    child.stderr?.on('data', collect);
+    // 把 chunk 解码成字符串并推给前端。
+    // 用 try/catch 兜底：前端 WebSocket 断了不能连累命令执行。
+    function pushStream(decoder, chunk) {
+      if (!onStreamData) return;
+      try {
+        const text = decoder.write(chunk);
+        if (text) onStreamData(text);
+      } catch {
+        // 前端断开、回调异常之类的问题，忽略掉，不影响命令本身
+      }
+    }
+
+    child.stdout?.on('data', (chunk) => {
+      collect(chunk);
+      pushStream(stdoutDecoder, chunk);
+    });
+    child.stderr?.on('data', (chunk) => {
+      collect(chunk);
+      pushStream(stderrDecoder, chunk);
+    });
 
     // 超时定时器
     const timer = setTimeout(() => {
@@ -399,6 +433,19 @@ function runProcess({ command, args, cwd, env, timeoutMs }) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+
+      // 把 decoder 里残留的尾巴（不完整的多字节字符）也清空推给前端。
+      // 不调用 end() 的话，最后一个汉字可能永远到不了前端。
+      if (onStreamData) {
+        try {
+          const restOut = stdoutDecoder.end();
+          if (restOut) onStreamData(restOut);
+          const restErr = stderrDecoder.end();
+          if (restErr) onStreamData(restErr);
+        } catch {
+          // 同上，忽略
+        }
+      }
 
       resolve({
         output,

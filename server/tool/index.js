@@ -55,9 +55,11 @@ export const WRITE_TOOLS = new Set([
 // 特殊：不走通用审批流程
 //   render_preview —— 永远放行（它自己会推 preview 消息）
 //   ask_user       —— 自己会发 question 类型的弹窗
+//   update_tasks   —— 永远放行（纯 UI 更新，不写文件不跑命令）
 export const SPECIAL_TOOLS = new Set([
   'render_preview',
   'ask_user',
+  'update_tasks',
 ]);
 
 // ---------------------------------------------------------------
@@ -78,6 +80,7 @@ const registry = {
   // ui
   render_preview: uiTools.render_preview,
   ask_user: uiTools.ask_user,
+  update_tasks: uiTools.update_tasks,
   // identity
   whoami: whoamiTools.whoami,
 };

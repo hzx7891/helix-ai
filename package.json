@@ -1,7 +1,7 @@
 {
   "name": "helix-ai-cn",
-  "version": "0.5.0",
-  "description": "本地优先的 AI Agent 工作台，能读文件、跑命令、搜网页、渲染预览，所有数据留在本地",
+  "version": "0.6.0",
+  "description": "本地优先的 AI Agent 工作台。多模型切换、拟真终端皮肤、UUID 会话隔离，所有数据留在本地。",
   "type": "module",
   "bin": {
     "helix": "bin/helix.js"
@@ -17,6 +17,7 @@
     "local-first",
     "llm",
     "deepseek",
+    "kimi",
     "helix",
     "中文"
   ],
@@ -37,6 +38,8 @@
     "bin",
     "server",
     "public",
+    "run.mjs",
+    "chat.mjs",
     "README.md",
     "LICENSE"
   ],
